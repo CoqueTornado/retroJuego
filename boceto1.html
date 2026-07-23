@@ -1,0 +1,230 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  html,body{margin:0;height:100%;background:#111;overflow:hidden;font-family:monospace}
+  body{display:flex;align-items:center;justify-content:center}
+  #wrap{position:relative;width:min(100vw,177.78vh,1024px);height:min(56.25vw,100vh,576px);
+        box-shadow:0 0 0 4px #000;background:#000}
+  #wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important;
+        image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+  #hud{position:absolute;top:0;left:0;width:100%;z-index:5;display:flex;align-items:center;
+       justify-content:space-between;gap:8px;padding:6px 12px;background:rgba(0,0,0,.6);
+       color:#fff;font:bold clamp(8px,1.5vw,15px) monospace;box-sizing:border-box;
+       text-shadow:1px 1px 0 #000}
+  #hud .g{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  #hud .heart{color:#e23b3b;font-size:1.2em;line-height:1}
+  #hud .dot{width:.8em;height:.8em;border-radius:50%;display:inline-block}
+  #hud .rel{background:#9b59ff;box-shadow:0 0 6px #d59bff}
+  #hud .loot{background:#f4d23a;box-shadow:0 0 6px #ffe14d}
+  #hint{position:absolute;bottom:4px;left:0;width:100%;text-align:center;z-index:5;
+        color:rgba(255,255,255,.6);font:clamp(7px,1.2vw,12px) monospace;text-shadow:1px 1px 0 #000}
+</style>
+
+<div id="wrap">
+  <div id="hud">
+    <div class="g"><span class="heart">♥</span><span class="heart">♥</span><span class="heart">♥</span> VIDAS 3</div>
+    <div class="g">FASE 1/10 · EL ACUEDUCTO DE LOS MILAGROS</div>
+    <div class="g"><span class="dot loot"></span> BOTÍN 5 <span class="dot rel"></span> RELIQUIAS 0/10</div>
+  </div>
+  <div id="hint">← → / A D : mover cámara (parallax)</div>
+</div>
+
+<script>
+/* EMERITA - Fase 1 con three.js (Orthographic 2D + capas + texturas generadas).
+   Controles: flechas / A D. Todo procedural en canvas offscreen => sin CORS. */
+const VW=384, VH=216, WORLD=640, GY=178;
+const wrap=document.getElementById('wrap');
+
+/* ---------- three setup ---------- */
+const scene=new THREE.Scene();
+const cam=new THREE.OrthographicCamera(0,VW,VH,0,-100,100);
+cam.position.z=10;
+const renderer=new THREE.WebGLRenderer({antialias:false});
+renderer.setPixelRatio(1); renderer.setSize(VW,VH,false);
+wrap.appendChild(renderer.domElement);
+
+const PAL={stone:'#d9c3b0',stoneD:'#b8a48f',brick:'#b5613a',brickD:'#8f4a2a',
+ water:'#34bccb',waterHi:'#7fe3ec',waterD:'#2aa0ae',grass:'#5fae3a',grassD:'#4e9a30',
+ clay:'#9a4a2a',lime:'#d8cdb0',wood:'#9a6a32',woodD:'#6e4620',ivy:'#8e44ad',ivyHi:'#c060c0',
+ egg:'#8e44ad',eggHi:'#d59bff',laurel:'#f4d23a',laurelD:'#caa12a',heart:'#e23b3b',
+ skin:'#e0a878',hair:'#6b4a2b',heroT:'#3a8a3a',heroL:'#3a5a2a',cape:'#c0392b',
+ friendT:'#8a5a2b',friendL:'#5a3d22',guardT:'#c0392b',guardL:'#7a4a2a',helm:'#cfd4da',
+ blossom:'#f7b9d2',blossomD:'#f48fb8',trunk:'#6b3f1c',black:'#241a12'};
+
+/* ---------- helpers offscreen ---------- */
+function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+function tex(c,rep){const t=new THREE.CanvasTexture(c);t.magFilter=THREE.NearestFilter;
+  t.minFilter=THREE.NearestFilter;t.generateMipmaps=false;
+  if(rep){t.wrapS=THREE.RepeatWrapping;t.wrapT=THREE.RepeatWrapping;}return t;}
+function layer(texture,w,h,z,factor,rep){const m=new THREE.MeshBasicMaterial({map:texture,transparent:true});
+  const o=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m);o.position.set(WORLD/2,VH/2,z);
+  o.userData.factor=factor;scene.add(o);return o;}
+const R=(x,c,xx,y,w,h)=>{c.fillStyle=x;c.fillRect(xx|0,y|0,w,h);};
+const circ=(c,x,y,r,col)=>{c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,7);c.fill();};
+
+/* ================= CAPA CIELO ================= */
+function skyCanvas(){const c=mk(WORLD,VH),x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,150);
+  g.addColorStop(0,'#f6d27a');g.addColorStop(.45,'#bfe0f2');g.addColorStop(1,'#a9d8f0');
+  x.fillStyle=g;x.fillRect(0,0,WORLD,VH);
+  circ(x,70,30,9,'#fff4c2');x.globalAlpha=.4;circ(x,70,30,15,'#fff4c2');x.globalAlpha=1;
+  x.save();x.globalAlpha=.12;x.fillStyle='#fff';
+  for(let i=0;i<6;i++){x.beginPath();x.moveTo(70,30);x.lineTo(140+i*90,VH);x.lineTo(180+i*90,VH);x.closePath();x.fill();}
+  x.restore();
+  x.fillStyle='#fff';
+  [[120,40,26,7],[300,58,20,6],[470,34,18,6],[560,52,16,5]].forEach(n=>{
+    x.fillRect(n[0],n[1],n[2],n[3]);x.beginPath();x.arc(n[0]+7,n[1],5,0,7);x.arc(n[0]+17,n[1]+1,4,0,7);x.fill();});
+  x.fillStyle='#445';[[250,46],[262,42],[274,46]].forEach(b=>{x.fillRect(b[0],b[1]+1,3,1);x.fillRect(b[0]+3,b[1],1,1);x.fillRect(b[0]+4,b[1]+1,3,1);});
+  return c;}
+
+/* ================= COLINAS / DEHESA (llano) ================= */
+function hillsCanvas(){const c=mk(WORLD,VH),x=c.getContext('2d');
+  R('#9ec79a',x,0,128,WORLD,40);R('#86b87f',x,0,142,WORLD,30);
+  for(let i=0;i<16;i++){const wx=i*44+12;R('#5d8f4f',x,wx,124,2,6);circ(x,wx+1,121,4,'#6fa05c');}
+  return c;}
+
+/* ================= ACUEDUCTO (arcos reales + bícromo) ================= */
+function arcade(x,yT,yB,n,x0,x1,light){
+  const span=x1-x0,vanW=span/n,pil=Math.max(4,vanW*0.22|0),inner=vanW-pil,r=inner/2,fH=5,spr=yT+fH+r;
+  for(let y=yT;y<yB;y++){x.fillStyle=((y-yT)/2|0)%2?(light?PAL.brickD:PAL.brick):(light?PAL.stoneD:PAL.stone);x.fillRect(x0,y,span,1);}
+  x.save();x.globalCompositeOperation='destination-out';
+  for(let v=0;v<n;v++){const vx=x0+v*vanW,cx=vx+inner/2;
+    x.beginPath();x.moveTo(vx,yB+2);x.lineTo(vx,spr);x.arc(cx,spr,r,Math.PI,0,false);x.lineTo(vx+inner,yB+2);x.closePath();x.fill();}
+  x.restore();
+  x.fillStyle=light?PAL.stoneD:PAL.brickD;x.fillRect(x0,yT+fH,span,1);
+}
+function aqueductCanvas(){const c=mk(WORLD,VH),x=c.getContext('2d');
+  arcade(x,62,148,9,0,WORLD,true);
+  arcade(x,90,GY,8,-10,WORLD+10,false);
+  // cascada base
+  R(PAL.water,x,468,88,7,90);R(PAL.waterHi,x,468,88,2,90);
+  // arcoiris
+  x.save();x.globalAlpha=.5;const cols=['#ff5a5a','#ff9f1c','#ffe14d','#5fd35f','#4aa3ff','#9b59ff'];
+  for(let i=0;i<cols.length;i++){x.strokeStyle=cols[i];x.lineWidth=3;x.beginPath();x.arc(455,150,46-i*4,Math.PI,0);x.stroke();}
+  x.restore();
+  return c;}
+
+/* ================= AGUA FLUJO (canal + cascada animados) ================= */
+function waterTopCanvas(){const c=mk(64,6),x=c.getContext('2d');
+  R(PAL.water,x,0,0,64,6);R(PAL.waterHi,x,0,0,64,1);
+  x.fillStyle='rgba(255,255,255,.7)';for(let i=0;i<64;i+=8){x.fillRect(i,2,3,1);x.fillRect(i+4,4,2,1);}
+  return c;}
+function fallCanvas(){const c=mk(8,32),x=c.getContext('2d');
+  R(PAL.water,x,0,0,8,32);R(PAL.waterHi,x,0,0,2,32);
+  x.fillStyle='rgba(255,255,255,.6)';for(let i=0;i<32;i+=6){x.fillRect(2,i,2,3);x.fillRect(5,i+3,2,3);}
+  return c;}
+
+/* ================= PLANO MEDIO (mundo factor 1) ================= */
+function drawTree(x,bx){R(PAL.trunk,x,bx,GY-24,3,24);R(PAL.trunk,x,bx-1,GY-14,1,7);R(PAL.trunk,x,bx+3,GY-16,1,7);
+  const cx=bx+1,cy=GY-32;for(let a=0;a<14;a++){const ang=a/14*7,rr=8+ (a%3);circ(x,cx+Math.cos(ang)*4,cy+Math.sin(ang)*3,rr,PAL.blossom);}
+  circ(x,cx,cy,9,PAL.blossom);for(let i=0;i<12;i++)circ(x,cx-7+((i*5)%15),cy-5+((i*3)%10),1,PAL.blossomD);}
+function drawCow(x,bx){const y=GY;R('#7a4a22',x,bx,y-9,13,6);R('#7a4a22',x,bx-3,y-8,4,4);R('#3a2a18',x,bx-4,y-7,1,1);
+  R('#3a2a18',x,bx+1,y-3,1,3);R('#3a2a18',x,bx+4,y-3,1,3);R('#3a2a18',x,bx+8,y-3,1,3);R('#3a2a18',x,bx+11,y-3,1,3);R('#caa',x,bx+5,y-3,2,1);}
+function drawStall(x,bx){const y=GY;R(PAL.woodD,x,bx,y-24,2,24);R(PAL.woodD,x,bx+36,y-24,2,24);
+  R(PAL.wood,x,bx,y-9,38,9);R(PAL.woodD,x,bx,y-9,38,1);
+  for(let i=0;i<8;i++)circ(x,bx+i*5,y-27,3,i%2?PAL.grass:PAL.grassD);
+  function rac(rx,ry){circ(x,rx,ry,1,PAL.ivy);circ(x,rx+2,ry,1,PAL.ivy);circ(x,rx+1,ry+1,1,PAL.ivyHi);circ(x,rx,ry+2,1,PAL.ivy);circ(x,rx+2,ry+2,1,PAL.ivy);}
+  rac(bx+9,y-23);rac(bx+25,y-23);
+  R('#b07a3a',x,bx+3,y-13,8,4);circ(x,bx+5,y-14,1,'#ff9f1c');circ(x,bx+8,y-14,1,'#e23b3b');
+  R('#b07a3a',x,bx+26,y-13,8,4);circ(x,bx+28,y-14,1,'#e23b3b');circ(x,bx+31,y-14,1,PAL.ivy);
+  R(PAL.skin,x,bx+17,y-19,4,4);R(PAL.hair,x,bx+17,y-19,4,2);R(PAL.black,x,bx+18,y-17,1,1);R(PAL.black,x,bx+19,y-17,1,1);R('#8a8f96',x,bx+16,y-15,6,6);}
+function drawWall(x){for(let y=92;y<GY;y+=6){const off=(y/6|0)%2*8;R(PAL.stone,x,0,y,54,5);R(PAL.stoneD,x,0,y+5,54,1);for(let xx=off;xx<54;xx+=16)R(PAL.stoneD,x,xx,y,1,6);}
+  for(let y=70;y<GY;y+=6){R(PAL.stone,x,32,y,18,5);R(PAL.stoneD,x,32,y+5,18,1);}
+  circ(x,41,70,9,PAL.stone);R(PAL.black,x,39,82,4,6);
+  for(let i=0;i<6;i++)circ(x,2+ (i%2)*4,98+i*4,3,PAL.grassD);
+  R(PAL.woodD,x,46,122,2,10);}
+function drawColumn(x,bx){for(let y=GY-46;y<GY;y+=2){R('#e8e2d4',x,bx,y,4,1);R('#cfc7b4',x,bx+1,y,1,1);}
+  R('#d8d0bd',x,bx-1,GY-48,6,2);R('#7a4a22',x,bx-1,GY-51,6,2);
+  R('#fff',x,bx,GY-57,3,6);R('#fff',x,bx+1,GY-60,2,3);R('#e08a30',x,bx+3,GY-59,2,1);R('#222',x,bx,GY-57,1,2);}
+function drawPlat(x,bx,by,opts){R(PAL.grass,x,bx,by,opts.w,3);R(PAL.stone,x,bx,by+3,opts.w,4);R(PAL.stoneD,x,bx,by+3,opts.w,1);
+  if(opts.fl){circ(x,bx+3,by-1,1,'#e23b3b');circ(x,bx+7,by-1,1,'#ffe14d');circ(x,bx+11,by-1,1,PAL.ivy);}
+  if(opts.ha){R(PAL.grassD,x,bx+4,by+7,1,6);R(PAL.grassD,x,bx+9,by+7,1,5);}
+  if(opts.he){for(let i=0;i<3;i++){R(PAL.grassD,x,bx+3+i*5,by+7,1,4);circ(x,bx+3+i*5,by+12,1.4,PAL.heart);}}}
+function drawGuard(x,bx,by){R(PAL.woodD,x,bx+8,by-16,1,18);R(PAL.helm,x,bx+7,by-18,3,3);
+  R(PAL.skin,x,bx+1,by-12,4,4);R(PAL.helm,x,bx+1,by-13,4,2);R(PAL.cape,x,bx+2,by-14,2,1);
+  R(PAL.black,x,bx+2,by-11,1,1);R(PAL.black,x,bx+3,by-11,1,1);R(PAL.guardT,x,bx,by-8,6,6);R(PAL.guardL,x,bx+1,by-2,2,3);R(PAL.guardL,x,bx+3,by-2,2,3);}
+function drawHero(x,bx){const y=GY;R(PAL.cape,x,bx-1,y-13,4,8);R(PAL.skin,x,bx+1,y-14,4,4);R(PAL.hair,x,bx+1,y-14,4,2);
+  R(PAL.black,x,bx+2,y-12,1,1);R(PAL.black,x,bx+3,y-12,1,1);R(PAL.heroT,x,bx+1,y-10,5,6);
+  R(PAL.heroT,x,bx+5,y-9,3,1);R(PAL.skin,x,bx+7,y-10,1,2);R(PAL.heroL,x,bx+1,y-4,2,4);R(PAL.heroL,x,bx+4,y-4,2,4);}
+function drawFriend(x,bx){const y=GY;R(PAL.skin,x,bx+2,y-21,5,5);R(PAL.hair,x,bx+2,y-21,5,2);R('#b08a4a',x,bx+1,y-20,7,1);
+  R(PAL.black,x,bx+3,y-18,1,1);R(PAL.black,x,bx+5,y-18,1,1);R(PAL.friendT,x,bx+1,y-16,7,9);
+  R(PAL.friendT,x,bx-1,y-15,2,7);R(PAL.skin,x,bx-1,y-16,2,2);R(PAL.friendT,x,bx+8,y-14,2,7);
+  R(PAL.friendL,x,bx+2,y-7,2,7);R(PAL.friendL,x,bx+5,y-7,2,7);}
+function drawRelic(x,bx){const y=GY+22;R(PAL.egg,x,bx,y,4,5);R(PAL.egg,x,bx+1,y-1,2,1);R(PAL.egg,x,bx+1,y+5,2,1);R(PAL.eggHi,x,bx+1,y+1,1,1);}
+function drawLoot(x,bx){const y=GY+24;R(PAL.laurelD,x,bx,y,8,1);
+  [[1,-2],[3,-3],[5,-3],[2,1],[4,1],[6,0]].forEach(l=>R(PAL.laurel,x,bx+l[0],y+l[1],2,2));}
+function midCanvas(){const c=mk(WORLD,VH),x=c.getContext('2d');
+  drawWall(x);drawColumn(x,330);drawTree(x,150);drawTree(x,372);drawStall(x,208);drawCow(x,276);
+  drawPlat(x,92,70,{w:30,he:true});drawGuard(x,96,70);
+  drawPlat(x,196,96,{w:24,fl:true});drawPlat(x,232,102,{w:20,ha:true});
+  drawFriend(x,72);drawHero(x,122);
+  return c;}
+
+/* ================= SUELO + ESTRATOS + FLORES + COLECCIONABLES ================= */
+function groundCanvas(){const c=mk(WORLD,VH),x=c.getContext('2d');
+  R(PAL.grass,x,0,GY,WORLD,18);R(PAL.grassD,x,0,GY,WORLD,2);R(PAL.clay,x,0,GY+18,WORLD,40);R(PAL.lime,x,0,GY+30,WORLD,40);
+  const cols=['#e23b3b','#fff','#ffe14d','#5a8fe2','#9b59ff'];
+  function patch(s){for(let i=0;i<8;i++){const fx=s+i*5+(i%2)*2;R(cols[i%5],x,fx,GY+4+(i%3)*3,2,2);R('#fff',x,fx+(i%2),GY+3+(i%3)*3,1,1);}}
+  patch(2);patch(330);patch(560);
+  drawRelic(x,150);drawLoot(x,214);
+  return c;}
+
+/* ---------- glow / llama (canvas radial) ---------- */
+function glowCanvas(col){const c=mk(16,16),x=c.getContext('2d'),g=x.createRadialGradient(8,8,0,8,8,8);
+  g.addColorStop(0,col);g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,16,16);return c;}
+
+/* ---------- petales (Points) ---------- */
+function petalTex(){const c=mk(4,4),x=c.getContext('2d');x.fillStyle=PAL.blossom;x.fillRect(1,0,2,4);x.fillRect(0,1,4,2);return c;}
+
+/* ================= CONSTRUIR ESCENA ================= */
+const Lsky  =layer(tex(skyCanvas()),WORLD,VH,-50,0);
+const Lhill =layer(tex(hillsCanvas()),WORLD,VH,-40,.25);
+const Laqu  =layer(tex(aqueductCanvas()),WORLD,VH,-30,.5);
+const tWater=tex(waterTopCanvas(),true);tWater.repeat.set(WORLD/64,1);
+const Lwat  =layer(tWater,WORLD,6,-29,.5);Lwat.position.y=VH-87;
+const tFall =tex(fallCanvas(),true);tFall.repeat.set(1,3);
+const Lfall =layer(tFall,7,90,-28,.5);Lfall.position.set(471.5,VH-133,-28);
+const Lmid  =layer(tex(midCanvas()),WORLD,VH,-10,1);
+const Lgnd  =layer(tex(groundCanvas()),WORLD,VH,-9,1);
+
+/* glow reliquia / laurel / antorcha (aditivos, factor 1) */
+function addGlow(col,wx,wy,size,z){const m=new THREE.MeshBasicMaterial({map:tex(glowCanvas(col)),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
+  const o=new THREE.Mesh(new THREE.PlaneGeometry(size,size),m);o.position.set(wx,wy,z);o.userData.factor=1;o.userData.base=wy;scene.add(o);return o;}
+const Grel=addGlow('rgba(213,155,255,.9)',152,VH-199,16,-8);
+const Gloot=addGlow('rgba(255,235,120,.9)',218,VH-201,16,-8);
+const Gfire=addGlow('rgba(255,150,40,.95)',47,VH-127,12,-8);
+
+/* petales */
+const PN=16,ppos=new Float32Array(PN*3),pvel=[];
+for(let i=0;i<PN;i++){ppos[i*3]=Math.random()*VW;ppos[i*3+1]=Math.random()*VH;ppos[i*3+2]=2;pvel.push({vy:.3+Math.random()*.3,vx:.1+Math.random()*.2});}
+const pgeo=new THREE.BufferGeometry();pgeo.setAttribute('position',new THREE.BufferAttribute(ppos,3));
+const pmat=new THREE.PointsMaterial({map:tex(petalTex()),size:4,sizeAttenuation:false,transparent:true,depthWrite:false});
+const petals=new THREE.Points(pgeo,pmat);scene.add(petals);
+
+/* ================= INPUT + LOOP ================= */
+const keys={};addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+let scroll=0;
+function frame(t){
+  const dir=(keys['arrowright']||keys['d']?1:0)-(keys['arrowleft']||keys['a']?1:0);
+  scroll=Math.max(0,Math.min(WORLD-VW,scroll+dir*1.6));
+  [Lsky,Lhill,Laqu,Lwat,Lfall,Lmid,Lgnd,Grel,Gloot,Gfire].forEach(o=>{
+    if(o.userData.factor!==undefined && o!==Lfall && o!==Lwat){o.position.x=WORLD/2-scroll*o.userData.factor;} });
+  // objetos factor 1 con worldX fijo (glows) siguen su propio x:
+  Grel.position.x=152-scroll;Gloot.position.x=218-scroll;Gfire.position.x=47-scroll;
+  // flujo agua
+  tWater.offset.x=(t*0.00006)%1;tFall.offset.y=-(t*0.0002)%1;
+  // glow pulsante
+  const g1=.5+.5*Math.sin(t/300),g2=.5+.5*Math.sin(t/300+1.5),gf=.6+.4*Math.sin(t/90);
+  Grel.material.opacity=.35+.5*g1;Grel.scale.setScalar(.8+.4*g1);
+  Gloot.material.opacity=.35+.5*g2;Gloot.scale.setScalar(.8+.4*g2);
+  Gfire.material.opacity=.5+.5*gf;Gfire.scale.setScalar(.8+.3*gf);
+  // petales
+  const a=pgeo.attributes.position.array;
+  for(let i=0;i<PN;i++){a[i*3+1]+=pvel[i].vy;a[i*3]+=pvel[i].vx;if(a[i*3+1]>VH){a[i*3+1]=-4;a[i*3]=Math.random()*VW;}}
+  pgeo.attributes.position.needsUpdate=true;
+  renderer.render(scene,cam);
+  requestAnimationFrame(frame);
+}
+try{console.log('EMERITA three.js arranca OK');requestAnimationFrame(frame);}
+catch(e){console.error(e);const d=document.createElement('pre');d.style.cssText='position:absolute;inset:0;color:#f55;background:rgba(0,0,0,.85);padding:10px;font:12px monospace;white-space:pre-wrap;z-index:99';d.textContent='ERROR:\n'+(e.stack||e);wrap.appendChild(d);}
+</script>

@@ -2,8 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Emerita Hub - Selector de Fases</title>
-<!-- Única librería necesaria para dibujar el juego -->
+<title>Selector de Fases</title>
 <script src="https://cloudflare.com"></script>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #050508; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: monospace; }
@@ -12,19 +11,15 @@
 </style>
 </head>
 <body>
-
 <div id="wrap"></div>
-
 <script>
-// CONFIGURACIÓN DE TU USUARIO
 const GITHUB_USER = "coquetornado";
 const REPO_NAME = "retroJuego";
 
-// LISTA DE TUS FICHEROS HTML (Añade aquí los nombres exactos cuando subas más)
+// Tu menú con la lista manual de tus ficheros del repositorio
 const listaFicheros = [
   "fase1.html",
-  "fase2.html",
-  "pruebas.html"
+  "fase2.html"
 ];
 
 const W = 384, H = 216;
@@ -37,41 +32,26 @@ function setup() {
 
 function draw() {
   background(15, 15, 25);
-  
-  // Título del menú
   fill(255, 180, 0);
   textAlign(CENTER, TOP);
   textSize(16);
-  text("EMERITA - SELECTOR DE FASES", W / 2, 20);
+  text("SELECTOR DE FASES", W / 2, 20);
   
-  // Instrucciones
   fill(200);
   textSize(8);
-  text("Pulsa el número en tu teclado para iniciar la fase:", W / 2, 50);
+  text("Pulsa el numero en tu teclado para iniciar:", W / 2, 50);
   
-  // Renderizar la lista de ficheros disponibles en pantalla
   for (let i = 0; i < listaFicheros.length; i++) {
-    // Ponemos el primer elemento resaltado en azul cian como guía estática
     if (i === 0) fill('#99ffff');
     else fill(150);
-    
-    textAlign(CENTER, TOP);
     text(`[${i + 1}] - ${listaFicheros[i]}`, W / 2, 80 + (i * 16));
   }
-  
-  // Pie de página instructivo
-  fill(100);
-  text("Asegúrate de que los nombres coincidan exactamente en GitHub", W / 2, H - 30);
 }
 
 function keyPressed() {
-  // Convertir la tecla pulsada a un índice del array (Teclas '1', '2', '3'...)
   let index = parseInt(key) - 1;
-  
-  // Si el índice existe en nuestra lista, redirigimos la pestaña del navegador
   if (index >= 0 && index < listaFicheros.length) {
-    let destinoUrl = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${listaFicheros[index]}`;
-    window.location.href = destinoUrl;
+    window.location.href = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${listaFicheros[index]}`;
   }
 }
 </script>

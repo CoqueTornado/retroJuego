@@ -2,160 +2,102 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Selector de Fases Automático</title>
-<!-- Favicon retro para evitar error 404 -->
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
-
-<!-- Librería p5.js -->
-<script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
-
+<title>Emerita Hub - Selector Automático</title>
+<!-- Librería gráfica p5.js -->
+<script src="https://cloudflare.com"></script>
 <style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #050508;
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden; font-family: monospace;
-  }
-  #wrap {
-    position: relative;
-    width: min(100vw, 177.78vh, 1024px);
-    height: min(56.25vw, 100vh, 576px);
-    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e;
-    background: #000;
-  }
-  canvas {
-    display: block; width: 100% !important; height: 100% !important;
-    image-rendering: pixelated;
-  }
+  html, body { margin: 0; padding: 0; height: 100%; background: #050508; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: monospace; }
+  #wrap { position: relative; width: min(100vw, 177.78vh, 1024px); height: min(56.25vw, 100vh, 576px); box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e; background: #000; }
+  canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; }
 </style>
 </head>
 <body>
+
 <div id="wrap"></div>
+
 <script>
-const GITHUB_USER = "coquetornado";
+// CONFIGURACIÓN DE RUTAS DE TU PERFIL
+const GITHUB_USER = "CoqueTornado";
 const REPO_NAME = "retroJuego";
 
+let availableLevels = [];
+let loadingError = false;
 const W = 384, H = 216;
 
-let listaFicheros = [];
-let estado = "CARGANDO"; // Estados: "CARGANDO", "LISTO", "ERROR", "VACIO"
-let selectedIndex = 0;
+function preload() {
+  // Conexión limpia al endpoint oficial de la API de GitHub
+  let url = `https://github.com{GITHUB_USER}/${REPO_NAME}/contents/`;
+  
+  fetch(url)
+    .then(response => {
+      if (!response.ok) throw new Error("Error en servidor");
+      return response.json();
+    })
+    .then(data => {
+      if (Array.isArray(data)) {
+        // Escanea y añade de forma automática solo si termina en .html
+        availableLevels = data
+          .filter(file => file.name.endsWith('.html') && file.name !== 'index.html')
+          .map(file => file.name);
+      }
+    })
+    .catch(err => {
+      console.error("Fallo de escaneo en la API:", err);
+      loadingError = true;
+    });
+}
 
 function setup() {
   let c = createCanvas(W, H);
   c.parent('wrap');
   noSmooth();
-  
-  // Buscar archivos en el repositorio automáticamente
-  cargarFasesDesdeGitHub();
-}
-
-function cargarFasesDesdeGitHub() {
-  // URL de la API pública de GitHub para tu repositorio
-  const url = `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/`;
-  
-  fetch(url)
-    .then(response => {
-      if (!response.ok) throw new Error("No se pudo conectar con GitHub");
-      return response.json();
-    })
-    .then(data => {
-      // Filtrar solo archivos .html y descartar index.html
-      listaFicheros = data
-        .filter(item => 
-          item.type === "file" && 
-          item.name.toLowerCase().endsWith(".html") && 
-          item.name.toLowerCase() !== "index.html"
-        )
-        .map(item => item.name)
-        .sort(); // Ordenar alfabéticamente
-
-      if (listaFicheros.length > 0) {
-        estado = "LISTO";
-      } else {
-        estado = "VACIO";
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      estado = "ERROR";
-    });
 }
 
 function draw() {
   background(15, 15, 25);
   
-  // Título principal
+  // Encabezado del sistema
   fill(255, 180, 0);
   textAlign(CENTER, TOP);
   textSize(14);
-  text("SELECTOR DE FASES", W / 2, 12);
+  text("EMERITA - NAVEGADOR AUTOMÁTICO", W / 2, 15);
+  
+  fill(200);
+  textSize(8);
+  text("Pulsa el número asignado para arrancar la fase:", W / 2, 38);
+  
+  if (loadingError) {
+    fill('#ff3333');
+    text("Error de sincronización con la API de GitHub", W / 2, H / 2);
+    return;
+  }
 
-  if (estado === "CARGANDO") {
-    fill(200);
-    textSize(9);
-    text("Buscando fases en GitHub...", W / 2, H / 2 - 5);
-    let dots = ".".repeat((floor(frameCount / 15) % 4));
-    text(dots, W / 2, H / 2 + 10);
-  } 
-  else if (estado === "ERROR") {
-    fill(255, 80, 80);
-    textSize(9);
-    text("Error al conectar con la API de GitHub", W / 2, H / 2);
-  } 
-  else if (estado === "VACIO") {
-    fill(255, 200, 80);
-    textSize(9);
-    text("No se encontraron otros archivos .html", W / 2, H / 2);
-  } 
-  else if (estado === "LISTO") {
-    fill(180);
-    textSize(7);
-    text("Flechas [▲/▼] + ENTER  o pulsa el [Número]:", W / 2, 32);
-
-    let startY = 52;
-    for (let i = 0; i < listaFicheros.length; i++) {
-      let y = startY + (i * 15);
-      
-      if (y > H - 20) break; // Evita pintar fuera de la pantalla
-
-      if (i === selectedIndex) {
-        fill('#00ffff');
-        text(`> [${i + 1}] ${listaFicheros[i]} <`, W / 2, y);
-      } else {
-        fill(130);
-        text(`[${i + 1}] ${listaFicheros[i]}`, W / 2, y);
-      }
+  // Si no hay archivos o la API tarda un segundo en responder
+  if (availableLevels.length === 0) {
+    fill(130);
+    text("Buscando ficheros en el repositorio...", W / 2, H / 2);
+  } else {
+    // Pinta en pantalla de forma dinámica todo lo que encuentra en tu repositorio
+    for (let i = 0; i < availableLevels.length; i++) {
+      fill(235);
+      textAlign(LEFT, TOP);
+      text(`[ ${i + 1} ]  ${availableLevels[i]}`, W / 2 - 85, 65 + (i * 18));
     }
   }
+  
+  // Pie de pantalla indicador
+  fill(90);
+  textAlign(CENTER, TOP);
+  text("Los nuevos .html subidos aparecerán aquí solos", W / 2, H - 22);
 }
 
 function keyPressed() {
-  if (estado !== "LISTO") return;
-
-  // Navegación con flechas
-  if (keyCode === UP_ARROW) {
-    selectedIndex = (selectedIndex - 1 + listaFicheros.length) % listaFicheros.length;
-  } 
-  else if (keyCode === DOWN_ARROW) {
-    selectedIndex = (selectedIndex + 1) % listaFicheros.length;
-  } 
-  // Iniciar fase con ENTER
-  else if (keyCode === ENTER) {
-    cargarFase(selectedIndex);
-  } 
-  // Directo pulsando el número (1, 2, 3...)
-  else {
-    let num = parseInt(key) - 1;
-    if (!isNaN(num) && num >= 0 && num < listaFicheros.length) {
-      cargarFase(num);
-    }
-  }
-}
-
-function cargarFase(index) {
-  if (index >= 0 && index < listaFicheros.length) {
-    window.location.href = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${listaFicheros[index]}`;
+  let index = parseInt(key) - 1;
+  
+  // Redirección dinámica basada en los elementos actuales del índice
+  if (index >= 0 && index < availableLevels.length) {
+    let destinoUrl = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${availableLevels[index]}`;
+    window.location.href = destinoUrl;
   }
 }
 </script>

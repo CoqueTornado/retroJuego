@@ -1,0 +1,447 @@
+<!-- Carga única de p5.js estable -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #050508;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-family: monospace;
+  }
+  #wrap {
+    position: relative;
+    width: min(100vw, 177.78vh, 1024px);
+    height: min(56.25vw, 100vh, 576px);
+    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e;
+    background: #000;
+  }
+  canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+</style>
+
+<div id="wrap"></div>
+
+<script>
+// ==========================================
+// CONSTANTES Y PALETA RETRO 8-BIT
+// ==========================================
+const W = 384, H = 216;
+const WORLD_W = 768;
+const GROUND_Y = 180;
+
+const P = {
+  skyTop: '#ff9900', skyMid: '#ffcc00', skyBot: '#66ccff',
+  stone: '#d9c3b0', stoneD: '#9e8a78', brick: '#b5613a', brickD: '#70301a',
+  water: '#00cccc', waterHi: '#99ffff',
+  grass: '#00aa00', grassD: '#006600', clay: '#883300', lime: '#cccc88',
+  wood: '#aa6622', woodD: '#663300',
+  egg: '#9900cc', eggHi: '#e099ff', laurel: '#ffcc00',
+  heart: '#ff0033', skin: '#ffcc99', hair: '#663300',
+  heroT: '#00aa00', heroL: '#005500', cape: '#cc0000',
+  guardT: '#cc0000', guardL: '#660000', helm: '#cccccc',
+  blossom: '#ff99cc', blossomD: '#ff3399', trunk: '#663300',
+  white: '#ffffff', black: '#000000'
+};
+
+// ==========================================
+// ESTADO DEL JUEGO Y ENTIDADES
+// ==========================================
+let player = {
+  x: 40, y: GROUND_Y - 18, w: 12, h: 18,
+  vx: 0, vy: 0, isGrounded: false, dir: 1
+};
+
+let platforms = [
+  { x: 100, y: 130, w: 48, h: 8 },
+  { x: 210, y: 110, w: 40, h: 8 },
+  { x: 310, y: 90, w: 56, h: 8 },
+  { x: 450, y: 120, w: 48, h: 8 },
+  { x: 580, y: 100, w: 40, h: 8 }
+];
+
+let collectibles = [
+  { x: 100, y: 110, w: 10, h: 10, type: 'relic', active: true },
+  { x: 310, y: 70, w: 10, h: 10, type: 'relic', active: true },
+  { x: 580, y: 80, w: 10, h: 10, type: 'relic', active: true },
+  { x: 210, y: 90, w: 10, h: 10, type: 'loot', active: true },
+  { x: 450, y: 100, w: 10, h: 10, type: 'loot', active: true }
+];
+
+let guards = [
+  { x: 310, y: 74, w: 10, h: 16, vx: 0.8, minX: 280, maxX: 335, active: true },
+  { x: 450, y: 104, w: 10, h: 16, vx: 0.8, minX: 430, maxX: 470, active: true }
+];
+
+let petals = [];
+let relicsCount = 0, lootCount = 0, lives = 3;
+let cameraX = 0;
+
+// ==========================================
+// SETUP
+// ==========================================
+function setup() {
+  let c = createCanvas(W, H);
+  c.parent('wrap');
+  noSmooth();
+
+  for(let i = 0; i < 25; i++) {
+    petals.push({
+      x: random(WORLD_W), y: random(H),
+      vx: random(0.2, 0.5), vy: random(0.3, 0.7),
+      c: random() < 0.5 ? P.blossom : P.blossomD
+    });
+  }
+}
+
+// ==========================================
+// LÓGICA DE FÍSICAS Y CONTROLES
+// ==========================================
+function updateGame() {
+  // Movimiento horizontal (A/D o Flechas)
+  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) {
+    player.vx = -1.8;
+    player.dir = -1;
+  } else if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) {
+    player.vx = 1.8;
+    player.dir = 1;
+  } else {
+    player.vx = 0;
+  }
+
+  // Salto (W, Espacio o Flecha Arriba)
+  if ((keyIsDown(87) || keyIsDown(UP_ARROW) || keyIsDown(32)) && player.isGrounded) {
+    player.vy = -4.5;
+    player.isGrounded = false;
+  }
+
+  // Gravedad
+  player.vy += 0.35;
+  if (player.vy > 6) player.vy = 6;
+
+  // Aplicar movimiento X
+  player.x += player.vx;
+  player.x = constrain(player.x, 8, WORLD_W - 8);
+
+  // Aplicar movimiento Y y colisiones
+  player.y += player.vy;
+  player.isGrounded = false;
+
+  // Colisión con el suelo
+  if (player.y + player.h / 2 >= GROUND_Y) {
+    player.y = GROUND_Y - player.h / 2;
+    player.vy = 0;
+    player.isGrounded = true;
+  }
+
+  // Colisión con plataformas
+  for (let p of platforms) {
+    let pTop = p.y - p.h / 2;
+    let pLeft = p.x - p.w / 2;
+    let pRight = p.x + p.w / 2;
+
+    if (player.vy >= 0 &&
+        player.x + player.w/4 > pLeft && player.x - player.w/4 < pRight &&
+        player.y + player.h/2 >= pTop && player.y + player.h/2 - player.vy <= pTop + 4) {
+      player.y = pTop - player.h / 2;
+      player.vy = 0;
+      player.isGrounded = true;
+    }
+  }
+
+  // Guardias (Enemigos)
+  for (let g of guards) {
+    if (!g.active) continue;
+    g.x += g.vx;
+    if (g.x >= g.maxX) { g.x = g.maxX; g.vx = -0.8; }
+    if (g.x <= g.minX) { g.x = g.minX; g.vx = 0.8; }
+
+    if (checkOverlap(player, g)) {
+      if (player.vy > 0 && player.y < g.y - 2) {
+        g.active = false;
+        player.vy = -3;
+      } else {
+        lives--;
+        player.x = max(20, player.x - 30);
+        player.vy = -2;
+        if (lives <= 0) resetGame();
+      }
+    }
+  }
+
+  // Coleccionables
+  for (let c of collectibles) {
+    if (!c.active) continue;
+    if (checkOverlap(player, c)) {
+      c.active = false;
+      if (c.type === 'relic') relicsCount++;
+      else lootCount += 5;
+    }
+  }
+
+  // Seguimiento de cámara
+  cameraX = constrain(player.x - W / 2, 0, WORLD_W - W);
+}
+
+function checkOverlap(a, b) {
+  return abs(a.x - b.x) < (a.w + b.w) / 2 && abs(a.y - b.y) < (a.h + b.h) / 2;
+}
+
+function resetGame() {
+  lives = 3;
+  relicsCount = 0;
+  lootCount = 0;
+  player.x = 40;
+  player.y = GROUND_Y - 18;
+  player.vx = 0;
+  player.vy = 0;
+  for (let g of guards) g.active = true;
+  for (let c of collectibles) c.active = true;
+}
+
+// ==========================================
+// BUCLE PRINCIPAL DE DIBUJO
+// ==========================================
+function draw() {
+  updateGame();
+
+  background(0);
+
+  // --- CAPAS DE FONDO Y PARALLAX (Estáticas respecto al Canvas) ---
+  drawSky();
+  drawClouds(cameraX);
+  drawHills(cameraX);
+  drawArcade(60, 120, 10, -40, WORLD_W + 40, true, cameraX, 0.4);
+  drawHaze();
+  drawArcade(82, 150, 9, -40, WORLD_W + 40, false, cameraX, 0.6);
+  drawCanal(82, cameraX);
+  drawWaterfall(470, cameraX);
+
+  // --- CAPAS DEL MUNDO DE JUEGO (Con desplazamiento de cámara) ---
+  push();
+  translate(-cameraX, 0);
+  drawForegroundDetails();
+  drawPlatforms();
+  drawCollectibles();
+  drawGuards();
+  drawPlayer();
+  pop();
+
+  // --- INTERFAZ Y EFECTOS SUPERIORES ---
+  drawPetals(cameraX);
+  drawHUD();
+}
+
+// ==========================================
+// DIBUJO DE ELEMENTOS GRÁFICOS
+// ==========================================
+function drawSky() {
+  noStroke();
+  fill(P.skyTop); rect(0, 0, W, 40);
+  fill(P.skyMid); rect(0, 40, W, 50);
+  fill(P.skyBot); rect(0, 90, W, 60);
+  fill('#ffffcc'); rect(50, 20, 16, 16);
+}
+
+function drawClouds(camX) {
+  fill(P.white);
+  let cs = [[40, 25, 24, 6], [180, 35, 18, 5], [320, 20, 28, 7], [500, 30, 20, 5]];
+  for (let c of cs) {
+    let x = (c[0] - camX * 0.1) % (W + 60);
+    if (x < -60) x += W + 60;
+    rect(x, c[1], c[2], c[3]);
+    rect(x + 4, c[1] - 3, c[2] - 8, c[3] + 3);
+  }
+}
+
+function drawHills(camX) {
+  fill('#5d8f4f');
+  rect(0, 128, W, 30);
+  fill('#4e7d42');
+  let offset = (camX * 0.25) % 45;
+  for (let i = -1; i < 10; i++) {
+    rect((i * 45) - offset, 122, 12, 10);
+  }
+}
+
+function drawArcade(yTop, yBot, nVans, xStart, xEnd, light, camX, f) {
+  let span = (xEnd - xStart);
+  let vanW = span / nVans;
+  for (let v = 0; v < nVans; v++) {
+    let vx0 = xStart + v * vanW - camX * f;
+    if (vx0 + vanW < -20 || vx0 > W + 20) continue;
+    fill(light ? P.stoneD : P.stone);
+    rect(vx0, yTop, vanW - 4, 6);
+    fill(light ? P.brickD : P.brick);
+    rect(vx0 + 2, yTop + 6, vanW - 8, yBot - yTop);
+    fill(0, 150);
+    rect(vx0 + 6, yTop + 14, vanW - 16, yBot - yTop - 14);
+  }
+}
+
+function drawCanal(yTop, camX) {
+  let x0 = -40 - camX * 0.6;
+  fill(P.water); rect(x0, yTop - 3, WORLD_W + 80, 4);
+  fill(P.waterHi); rect(x0, yTop - 3, WORLD_W + 80, 1);
+}
+
+function drawWaterfall(wx, camX) {
+  let x = wx - camX * 0.6;
+  fill(P.water); rect(x, 80, 8, 98);
+  fill(P.waterHi); rect(x + 2, 80, 2, 98);
+  if (frameCount % 8 < 4) {
+    fill(P.white); rect(x - 2, 175, 12, 3);
+  }
+}
+
+function drawHaze() {
+  noStroke();
+  fill(200, 230, 255, 40);
+  rect(0, 130, W, 30);
+}
+
+function drawForegroundDetails() {
+  noStroke();
+  fill(P.grass); rect(0, GROUND_Y, WORLD_W, 4);
+  fill(P.grassD); rect(0, GROUND_Y + 4, WORLD_W, 2);
+  fill(P.clay); rect(0, GROUND_Y + 6, WORLD_W, 14);
+  fill(P.lime); rect(0, GROUND_Y + 20, WORLD_W, 20);
+
+  drawTree(140, GROUND_Y);
+  drawTree(380, GROUND_Y);
+  drawTree(620, GROUND_Y);
+
+  drawSign(60, GROUND_Y - 16, "MURALLA");
+  drawSign(260, GROUND_Y - 16, "ACUEDUCTO");
+  drawSign(500, GROUND_Y - 16, "MANDOS [A][D]");
+}
+
+function drawTree(x, y) {
+  fill(P.trunk); rect(x - 2, y - 20, 5, 20);
+  fill(P.blossom); rect(x - 12, y - 35, 25, 15);
+  fill(P.blossomD); rect(x - 8, y - 32, 17, 10);
+}
+
+function drawSign(x, y, txt) {
+  fill(P.woodD); rect(x, y, 2, 16);
+  fill(P.wood); rect(x - 12, y - 10, 26, 10);
+  fill(P.white);
+  textSize(6);
+  textAlign(CENTER, CENTER);
+  text(txt, x + 1, y - 5);
+}
+
+function drawPlatforms() {
+  for (let p of platforms) {
+    push();
+    translate(p.x, p.y);
+    noStroke();
+    fill(P.grass); rect(-p.w/2, -4, p.w, 3);
+    fill(P.stone); rect(-p.w/2, -1, p.w, 5);
+    fill(P.stoneD); rect(-p.w/2, 3, p.w, 1);
+    pop();
+  }
+}
+
+function drawCollectibles() {
+  for (let c of collectibles) {
+    if (!c.active) continue;
+    push();
+    translate(c.x, c.y);
+    noStroke();
+    let floatY = Math.sin((frameCount + c.x) * 0.1) * 2;
+    if (c.type === 'relic') {
+      fill(P.eggHi); rect(-3, -4 + floatY, 6, 8);
+      fill(P.egg); rect(-2, -3 + floatY, 4, 6);
+    } else {
+      fill(P.laurel); rect(-4, -2 + floatY, 8, 4);
+      fill(P.white); rect(-1, -1 + floatY, 2, 2);
+    }
+    pop();
+  }
+}
+
+function drawGuards() {
+  for (let g of guards) {
+    if (!g.active) continue;
+    push();
+    translate(g.x, g.y);
+    noStroke();
+    let bob = Math.sin(frameCount * 0.2);
+    fill(P.helm); rect(-3, -8 + bob, 6, 3);
+    fill(P.skin); rect(-3, -5 + bob, 6, 4);
+    fill(P.guardT); rect(-4, -1 + bob, 8, 5);
+    fill(P.guardL); rect(-3, 4, 2, 4); rect(1, 4, 2, 4);
+    fill(P.woodD); rect(4, -10, 2, 18);
+    fill(P.helm); rect(4, -12, 2, 2);
+    pop();
+  }
+}
+
+function drawPlayer() {
+  push();
+  translate(player.x, player.y);
+  noStroke();
+  let isMoving = Math.abs(player.vx) > 0.1;
+  let bob = isMoving ? Math.sin(frameCount * 0.3) * 1.5 : 0;
+  let dir = player.dir;
+
+  fill(P.cape); rect(-5 * dir, -6 + bob, 4, 10);
+  fill(P.skin); rect(-3, -9 + bob, 6, 6);
+  fill(P.hair); rect(-3, -9 + bob, 6, 2);
+  fill(P.black); rect(dir > 0 ? 1 : -2, -6 + bob, 1, 1);
+  fill(P.heroT); rect(-3, -3 + bob, 6, 6);
+  fill(P.heroL); rect(-3, 3, 2, 6); rect(1, 3, 2, 6);
+  pop();
+}
+
+function drawPetals(camX) {
+  noStroke();
+  for (let p of petals) {
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.y > H) { p.y = -5; p.x = camX + random(W); }
+    let screenX = p.x - camX;
+    fill(p.c);
+    rect(screenX, p.y, 2, 2);
+  }
+}
+
+function drawHUD() {
+  push();
+  fill(0, 220);
+  rect(0, 0, W, 16);
+  stroke(255);
+  line(0, 16, W, 16);
+  noStroke();
+
+  for (let i = 0; i < lives; i++) {
+    fill(P.heart);
+    rect(6 + i * 9, 5, 7, 6);
+  }
+
+  fill(P.white);
+  textSize(8);
+  textFont('monospace');
+  textAlign(LEFT, CENTER);
+  text("EMERITA", 40, 8);
+
+  textAlign(CENTER, CENTER);
+  fill(P.laurel);
+  text("BOTIN: " + lootCount, W / 2, 8);
+
+  textAlign(RIGHT, CENTER);
+  fill(P.eggHi);
+  text("RELIQUIAS: " + relicsCount + "/3", W - 8, 8);
+  pop();
+}
+</script>

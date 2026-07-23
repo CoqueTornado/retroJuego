@@ -2,206 +2,37 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<!-- Carga única de p5.js estable -->
+<title>Emerita Hub</title>
+<!-- LIBRERÍA P5.JS INCORPORADA -->
 <script src="https://cloudflare.com"></script>
-
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    background: #050508;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    font-family: monospace;
-  }
-  #wrap {
-    position: relative;
-    width: min(100vw, 177.78vh, 1024px);
-    height: min(56.25vw, 100vh, 576px);
-    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e;
-    background: #000;
-  }
-  canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-  }
+  html, body { margin: 0; padding: 0; height: 100%; background: #050508; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: monospace; }
+  #wrap { position: relative; width: min(100vw, 177.78vh, 1024px); height: min(56.25vw, 100vh, 576px); box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e; background: #000; }
+  canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; }
 </style>
 </head>
 <body>
-
 <div id="wrap"></div>
-
 <script>
-// Configura aquí tus datos de GitHub para que la API funcione
-const GITHUB_USER = "coquetornado"; 
-const REPO_NAME = "retroJuego";
-
+// CONFIGURACIÓN
+const W = 384, H = 216, GROUND_Y = 180;
 let gameStarted = false;
-let availableLevels = [];
+let player = { x: 40, y: GROUND_Y - 18 };
 
-// ==========================================
-// CONSTANTES Y CONFIGURACIÓN ORIGINAL
-// ==========================================
-const W = 384, H = 216;
-const WORLD_W = 768;
-const GROUND_Y = 180;
-
-const P = {
-  skyTop: '#ff9900', skyMid: '#ffcc00', skyBot: '#66ccff',
-  stone: '#d9c3b0', stoneD: '#9e8a78', brick: '#b5613a', brickD: '#70301a',
-  water: '#00cccc', waterHi: '#99ffff',
-  grass: '#00aa00', grassD: '#006600', clay: '#883300', lime: '#cccc88',
-  wood: '#aa6622', woodD: '#663300',
-  egg: '#9900cc', eggHi: '#e099ff', laurel: '#ffcc00',
-  heart: '#ff0033', skin: '#ffcc99', hair: '#663300',
-  heroT: '#00aa00', heroL: '#005500', cape: '#cc0000',
-  guardT: '#cc0000', guardL: '#660000', helm: '#cccccc',
-  blossom: '#ff99cc', blossomD: '#ff3399', trunk: '#663300',
-  white: '#ffffff', black: '#000000'
-};
-
-let player = { x: 40, y: GROUND_Y - 18, w: 12, h: 18, vx: 0, vy: 0, isGrounded: false, dir: 1 };
-let platforms = [{ x: 100, y: 130, w: 48, h: 8 }, { x: 210, y: 110, w: 40, h: 8 }, { x: 310, y: 90, w: 56, h: 8 }];
-let collectibles = [{ x: 100, y: 110, w: 10, h: 10, type: 'relic', active: true }];
-let guards = [{ x: 310, y: 74, w: 10, h: 16, vx: 0.8, minX: 280, maxX: 335, active: true }];
-let petals = [];
-let relicsCount = 0, lootCount = 0, lives = 3, cameraX = 0;
-
-// ==========================================
-// PRELOAD Y ENLACE DINÁMICO A GITHUB
-// ==========================================
-function preload() {
-  // Corregido: Ahora apunta al servidor de la API de GitHub de forma limpia
-  let url = `https://github.com{GITHUB_USER}/${REPO_NAME}/contents/`;
-  
-  fetch(url)
-    .then(response => response.json())
-    .then(data => {
-      if (Array.isArray(data)) {
-        availableLevels = data
-          .filter(file => file.name.endsWith('.html') && file.name !== 'index.html')
-          .map(file => file.name);
-      }
-    })
-    .catch(err => console.error("Error cargando el índice de niveles:", err));
-}
-
-function setup() {
-  let c = createCanvas(W, H);
-  c.parent('wrap');
-  noSmooth();
-
-  for(let i = 0; i < 25; i++) {
-    petals.push({
-      x: random(WORLD_W), y: random(H),
-      vx: random(0.2, 0.5), vy: random(0.3, 0.7),
-      c: random() < 0.5 ? P.blossom : P.blossomD
-    });
-  }
-}
-
+function setup() { let c = createCanvas(W, H); c.parent('wrap'); noSmooth(); }
 function draw() {
   background(10, 10, 20);
   if (!gameStarted) {
-    drawMenu();
+    fill(255, 204, 0); textAlign(CENTER); textSize(16); text("EMERITA HUB", W/2, H/2);
+    textSize(8); text("Pulsa [ ESPACIO ] para iniciar", W/2, H/2 + 20);
   } else {
-    runGameLoop();
+    // Escena juego
+    background(100, 200, 255);
+    fill(0, 170, 0); rect(0, GROUND_Y, W, H - GROUND_Y);
+    fill(0, 255, 0); rect(player.x, player.y, 12, 18);
   }
 }
-
-function drawMenu() {
-  fill(P.skyMid);
-  textSize(16);
-  textAlign(CENTER, TOP);
-  text("EMERITA HUB - SELECCIÓN DE FASE", W / 2, 20);
-  
-  textSize(8);
-  fill(P.white);
-  text("Pulsa el número en tu teclado para cargar la fase:", W / 2, 50);
-
-  if (availableLevels.length === 0) {
-    fill(P.stoneD);
-    text("(Sube más archivos .html a tu repo para verlos aquí)", W / 2, 90);
-  } else {
-    for (let i = 0; i < availableLevels.length; i++) {
-      let isSelected = (i === 0);
-      fill(isSelected ? P.waterHi : P.stone);
-      text(`[${i + 1}] - ${availableLevels[i]}`, W / 2, 80 + (i * 15));
-    }
-  }
-
-  fill(P.water);
-  text("O pulsa [ ESPACIO ] para probar la fase local actual", W / 2, H - 40);
-}
-
-function keyPressed() {
-  if (!gameStarted) {
-    if (key === ' ') {
-      gameStarted = true;
-    }
-    let index = parseInt(key) - 1;
-    if (index >= 0 && index < availableLevels.length) {
-      window.location.href = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${availableLevels[index]}`;
-    }
-  }
-}
-
-function runGameLoop() {
-  updateGame();
-  drawSky();
-  drawClouds(cameraX);
-  drawHills(cameraX);
-  drawArcade(60, 120, 10, -40, WORLD_W + 40, true, cameraX, 0.4);
-  drawHaze();
-  drawArcade(82, 150, 9, -40, WORLD_W + 40, false, cameraX, 0.6);
-  drawCanal(82, cameraX);
-  drawWaterfall(470, cameraX);
-
-  push();
-  translate(-cameraX, 0);
-  drawForegroundDetails();
-  drawPlatforms();
-  drawCollectibles();
-  drawGuards();
-  drawPlayer();
-  pop();
-
-  drawPetals(cameraX);
-  drawHUD();
-}
-
-function updateGame() {
-  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) { player.vx = -1.8; player.dir = -1; } 
-  else if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) { player.vx = 1.8; player.dir = 1; } 
-  else { player.vx = 0; }
-  if ((keyIsDown(87) || keyIsDown(UP_ARROW)) && player.isGrounded) { player.vy = -4.5; player.isGrounded = false; }
-  player.vy += 0.35; if (player.vy > 6) player.vy = 6;
-  player.x += player.vx; player.x = constrain(player.x, 8, WORLD_W - 8);
-  player.y += player.vy; player.isGrounded = false;
-  if (player.y + player.h / 2 >= GROUND_Y) { player.y = GROUND_Y - player.h / 2; player.vy = 0; player.isGrounded = true; }
-  cameraX = constrain(player.x - W / 2, 0, WORLD_W - W);
-}
-
-function drawSky() { noStroke(); fill(P.skyTop); rect(0, 0, W, 40); fill(P.skyMid); rect(0, 40, W, 50); fill(P.skyBot); rect(0, 90, W, 60); fill('#ffffcc'); rect(50, 20, 16, 16); }
-function drawClouds(camX) { fill(P.white); let cs = [[40, 25, 24, 6], [180, 35, 18, 5]]; for (let c of cs) { let x = (c[0] - camX * 0.1) % (W + 60); rect(x, c[1], c[2], c[3]); } }
-function drawHills(camX) { fill('#5d8f4f'); rect(0, 128, W, 30); }
-function drawArcade(yTop, yBot, nVans, xStart, xEnd, light, camX, f) { let span = (xEnd - xStart); let vanW = span / nVans; for (let v = 0; v < nVans; v++) { let vx0 = xStart + v * vanW - camX * f; fill(light ? P.stoneD : P.stone); rect(vx0, yTop, vanW - 4, 6); } }
-function drawHaze() {}
-function drawCanal(yTop, camX) {}
-function drawWaterfall(wx, camX) {}
-function drawForegroundDetails() { noStroke(); fill(P.grassD); rect(0, GROUND_Y, WORLD_W, H - GROUND_Y); fill(P.grass); rect(0, GROUND_Y, WORLD_W, 2); }
-function drawPlatforms() { fill(P.wood); for(let p of platforms) rect(p.x - p.w/2, p.y - p.h/2, p.w, p.h); }
-function drawCollectibles() {}
-function drawGuards() {}
-function drawPlayer() { fill(P.heroT); rect(player.x - player.w/2, player.y - player.h/2, player.w, player.h); }
-function drawPetals(camX) {}
-function drawHUD() {}
+function keyPressed() { if (key === ' ') gameStarted = true; }
 </script>
 </body>
 </html>

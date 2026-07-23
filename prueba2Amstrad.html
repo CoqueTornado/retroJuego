@@ -1,0 +1,218 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+<style>
+ html,body{margin:0;height:100%;background:#111;overflow:hidden;font-family:monospace}
+ body{display:flex;align-items:center;justify-content:center}
+ #wrap{position:relative;width:min(100vw,177.78vh,1024px);height:min(56.25vw,100vh,576px);
+       box-shadow:0 0 0 4px #000;background:#000}
+ #wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important;
+       image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+ #hud{position:absolute;top:0;left:0;width:100%;z-index:5;display:flex;align-items:center;
+      justify-content:space-between;gap:8px;padding:6px 12px;background:rgba(0,0,0,.6);
+      color:#fff;font:bold clamp(8px,1.5vw,15px) monospace;box-sizing:border-box;text-shadow:1px 1px 0 #000}
+ #hud .g{display:flex;align-items:center;gap:6px;white-space:nowrap}
+ #hud .heart{color:#e23b3b;font-size:1.2em}
+ #hud .dot{width:.8em;height:.8em;border-radius:50%;display:inline-block}
+ #hud .rel{background:#9b59ff;box-shadow:0 0 6px #d59bff}
+ #hud .loot{background:#f4d23a;box-shadow:0 0 6px #ffe14d}
+ #hint{position:absolute;bottom:4px;left:0;width:100%;text-align:center;z-index:5;
+       color:rgba(255,255,255,.6);font:clamp(7px,1.2vw,12px) monospace;text-shadow:1px 1px 0 #000}
+</style>
+<div id="wrap">
+ <div id="hud">
+   <div class="g"><span class="heart">♥</span><span class="heart">♥</span><span class="heart">♥</span> VIDAS 3</div>
+   <div class="g">FASE 1/10 · EL ACVEDVCTO DE LOS MILAGROS</div>
+   <div class="g"><span class="dot loot"></span> BOTÍN <span id="bN">5</span> <span class="dot rel"></span> RELIQVIAS <span id="rN">0</span>/10</div>
+ </div>
+ <div id="hint">← → mover · ESPACIO / ↑ saltar</div>
+</div>
+<script>
+/* EMERITA - Fase 1 (Phaser 3) v2.
+   ARREGLOS: (1) colisiones reales => el prota NO cae y se sube a plataformas;
+   (2) sprites a tamano real SIN setScale => outline fino + bisel = volumen;
+   (3) animacion de caminar del prota.
+   El "look 17" de verdad se consigue cargando PNGs: hueco al final (load.image). */
+const VW=384, VH=216, WORLD=720, GY=178, S=2; // S = escala interna del horneado (NO del mundo)
+const C={stone:'#d9c3b0',brick:'#b5613a',water:'#34bccb',waterHi:'#7fe3ec',
+ grass:'#5fae3a',grassD:'#4e9a30',clay:'#9a4a2a',lime:'#d8cdb0',wood:'#9a6a32',woodD:'#6e4620',
+ ivy:'#8e44ad',egg:'#8e44ad',eggHi:'#d59bff',laurel:'#f4d23a',laurelD:'#caa12a',
+ skin:'#e0a878',hair:'#6b4a2b',heroT:'#3a8a3a',heroL:'#3a5a2a',cape:'#c0392b',
+ friendT:'#8a5a2b',friendL:'#5a3d22',guardT:'#c0392b',guardL:'#7a4a2a',helm:'#cfd4da',
+ blossom:'#f7b9d2',trunk:'#6b3f1c',black:'#241a12',capC:'#b08a4a',bossCap:'#8e2f63',
+ bossT:'#cfd4da',bossL:'#caa15a',bossHair:'#e0c060',book:'#b04a6a'};
+function adj(hex,a){const n=parseInt(hex.slice(1),16);let r=(n>>16)+a,g=((n>>8)&255)+a,b=(n&255)+a;
+ const cl=v=>Math.max(0,Math.min(255,v));return 'rgb('+cl(r)+','+cl(g)+','+cl(b)+')';}
+function toHex(c){if(c[0]==='#')return c;const m=c.match(/\d+/g);return '#'+m.slice(0,3).map(v=>(+v).toString(16).padStart(2,'0')).join('');}
+
+/* HORNEADO v2: bloques en coords base -> canvas *S, con OUTLINE 1px + BISEL 1px en res final */
+function bake2(bw,bh,blocks){
+ const w=bw*S,h=bh*S,cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d');
+ x.fillStyle='#000'; // outline = silueta expandida 1px (fino, porque NO se reescala en el mundo)
+ for(const b of blocks){const X=b[0]*S,Y=b[1]*S,W=b[2]*S,H=b[3]*S;x.fillRect(X-1,Y-1,W+2,H+2);}
+ for(const b of blocks){const X=b[0]*S,Y=b[1]*S,W=b[2]*S,H=b[3]*S,col=toHex(b[4]);
+   x.fillStyle=col;x.fillRect(X,Y,W,H);
+   x.fillStyle=adj(col,42); x.fillRect(X,Y,W,1); x.fillRect(X,Y,1,H);          // luz sup/izq
+   x.fillStyle=adj(col,-52);x.fillRect(X,Y+H-1,W,1); x.fillRect(X+W-1,Y,1,H);  // sombra inf/der
+ }
+ return cv;
+}
+/* definiciones base (coords pequenas; S las amplia) */
+const SP={
+ hero:[[1,2,3,8,C.cape],[2,10,2,4,C.heroL],[5,10,2,4,C.heroL],[2,5,5,5,C.heroT],
+       [6,6,3,1,C.heroT],[8,5,1,2,C.skin],[3,1,4,4,C.skin],[3,1,4,2,C.hair],[4,3,1,1,C.black],[5,3,1,1,C.black]],
+ hero2:[[1,2,3,8,C.cape],[2,9,2,4,C.heroL],[5,11,2,4,C.heroL],[2,5,5,5,C.heroT],      // piernas alternas
+       [6,6,3,1,C.heroT],[8,5,1,2,C.skin],[3,1,4,4,C.skin],[3,1,4,2,C.hair],[4,3,1,1,C.black],[5,3,1,1,C.black]],
+ friend:[[3,1,5,5,C.skin],[3,1,5,2,C.hair],[2,2,7,1,C.capC],[4,3,1,1,C.black],[6,3,1,1,C.black],
+       [2,6,7,8,C.friendT],[0,5,2,7,C.friendT],[0,4,2,2,C.skin],[9,6,2,7,C.friendT],
+       [3,14,2,6,C.friendL],[6,14,2,6,C.friendL]],
+ guard:[[8,0,1,18,C.woodD],[7,0,3,2,C.helm],[3,0,2,1,C.cape],[2,1,4,2,C.helm],[2,3,4,3,C.skin],
+       [3,4,1,1,C.black],[4,4,1,1,C.black],[1,6,6,6,C.guardT],[2,12,2,4,C.guardL],[4,12,2,4,C.guardL]],
+ boss:[[1,4,10,12,C.bossCap],[3,6,6,7,C.bossT],[3,13,2,4,C.bossL],[7,13,2,4,C.bossL],
+       [4,2,4,4,C.skin],[4,2,4,1,C.bossHair],[6,1,4,3,C.book],[5,4,1,1,C.black],[6,4,1,1,C.black]],
+ relic:[[2,0,2,1,C.egg],[1,1,4,4,C.egg],[2,5,2,1,C.egg],[2,1,1,1,C.eggHi]],
+ loot:[[0,2,8,1,C.laurelD],[1,0,2,2,C.laurel],[3,-1,2,2,C.laurel],[5,-1,2,2,C.laurel],[2,3,2,2,C.laurel],[4,3,2,2,C.laurel],[6,2,2,2,C.laurel]]
+};
+const SZ={hero:[10,14],hero2:[10,14],friend:[12,20],guard:[10,18],boss:[12,18],relic:[6,7],loot:[10,5]};
+
+/* acueducto horneado con VOLUMEN (sombra intrados / luz extrados) + musgo */
+function bakeAqu(){
+ const w=WORLD,h=150,cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d');
+ function arcade(yT,yB,n,light){
+   const span=w,vanW=span/n,pil=Math.max(4,vanW*0.22|0),inner=vanW-pil,r=inner/2,fH=5,spr=yT+fH+r;
+   for(let y=yT;y<yB;y++){x.fillStyle=((y-yT)/3|0)%2?(light?adj(C.brick,-30):C.brick):(light?adj(C.stone,-25):C.stone);x.fillRect(0,y,span,1);}
+   for(let v=0;v<=n;v++){const px=v*vanW+inner;x.fillStyle='rgba(0,0,0,.22)';x.fillRect(px-1,yT+fH,2,yB-yT-fH);x.fillStyle='rgba(255,255,255,.18)';x.fillRect(v*vanW,yT+fH,1,yB-yT-fH);}
+   for(let v=0;v<n;v++){const cx=v*vanW+inner/2;
+     x.strokeStyle='rgba(255,255,255,.35)';x.lineWidth=2;x.beginPath();x.moveTo(v*vanW,yB);x.lineTo(v*vanW,spr);x.arc(cx,spr,r,Math.PI,0);x.lineTo(v*vanW+inner,yB);x.stroke();
+     x.strokeStyle='rgba(0,0,0,.4)';x.lineWidth=2;x.beginPath();x.arc(cx,spr,r-1,Math.PI,0);x.stroke();}
+   x.save();x.globalCompositeOperation='destination-out';x.fillStyle='#000';
+   for(let v=0;v<n;v++){const cx=v*vanW+inner/2;x.beginPath();x.moveTo(v*vanW,yB+2);x.lineTo(v*vanW,spr);x.arc(cx,spr,r,Math.PI,0);x.lineTo(v*vanW+inner,yB+2);x.closePath();x.fill();}
+   x.restore();
+   x.fillStyle='rgba(90,140,70,.5)';for(let i=0;i<n*2;i++){const mx=(i*37+13)%w;x.fillRect(mx,yT+fH+(i%3)*9,3,1);}
+ }
+ arcade(2,86,9,true);arcade(34,h,8,false);
+ x.save();x.globalAlpha=.5;x.lineWidth=2;const cols=['#ff5a5a','#ff9f1c','#ffe14d','#5fd35f','#4aa3ff','#9b59ff'];
+ for(let i=0;i<cols.length;i++){x.strokeStyle=cols[i];x.beginPath();x.arc(470,92,52-i*4,Math.PI,0);x.stroke();}x.restore();
+ return cv;
+}
+/* arbol: copa irregular de 3 tonos + outline + tronco con sombra */
+function bakeTree(){const w=30,h=40,cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d');
+ x.fillStyle=C.trunk;x.fillRect(13,24,4,16);x.fillStyle=adj(C.trunk,-35);x.fillRect(16,24,1,16);
+ const lobes=[[15,12,9],[9,16,7],[21,16,7],[12,8,6],[19,9,6]];
+ x.fillStyle='#2f6b2a';for(const l of lobes){x.beginPath();x.arc(l[0]+1,l[1]+2,l[2]+1,0,7);x.fill();} // outline
+ x.fillStyle=adj(C.grass,-30);for(const l of lobes){x.beginPath();x.arc(l[0],l[1],l[2],0,7);x.fill();} // sombra
+ x.fillStyle=C.grass;for(const l of lobes){x.beginPath();x.arc(l[0]-1,l[1]-1,l[2]-1,0,7);x.fill();}   // base
+ x.fillStyle=adj(C.grass,50);for(const l of lobes){x.beginPath();x.arc(l[0]-3,l[1]-3,l[2]-3,0,7);x.fill();} // luz
+ return cv;
+}
+/* suelo con guijarros sombreados + flores */
+function bakeGround(){const w=WORLD,h=VH-GY+30,cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d');
+ x.fillStyle=C.grass;x.fillRect(0,0,w,18);x.fillStyle=adj(C.grass,30);x.fillRect(0,0,w,2);x.fillStyle=C.grassD;x.fillRect(0,16,w,2);
+ x.fillStyle=C.clay;x.fillRect(0,18,w,40);x.fillStyle=adj(C.clay,-25);x.fillRect(0,18,w,2);x.fillStyle=C.lime;x.fillRect(0,34,w,40);
+ x.fillStyle='rgba(0,0,0,.18)';for(let i=0;i<w;i+=7)x.fillRect(i+(i%2),22+(i%3)*4,2,2);
+ const cols=['#e23b3b','#fff','#ffe14d','#5a8fe2','#9b59ff'];
+ function patch(s){for(let i=0;i<9;i++){const fx=s+i*5+(i%2)*2;x.fillStyle=cols[i%5];x.fillRect(fx,4+(i%3)*3,2,2);x.fillStyle='#fff';x.fillRect(fx+(i%2),3+(i%3)*3,1,1);}}
+ patch(2);patch(330);patch(620);return cv;
+}
+function bakeGlow(col){const cv=document.createElement('canvas');cv.width=16;cv.height=16;const x=cv.getContext('2d');
+ const g=x.createRadialGradient(8,8,0,8,8,8);g.addColorStop(0,col);g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,16,16);return cv;}
+function bakeWater(){const cv=document.createElement('canvas');cv.width=32;cv.height=6;const x=cv.getContext('2d');
+ x.fillStyle=C.water;x.fillRect(0,0,32,6);x.fillStyle=C.waterHi;x.fillRect(0,0,32,1);
+ x.fillStyle='rgba(255,255,255,.7)';for(let i=0;i<32;i+=8){x.fillRect(i,2,3,1);x.fillRect(i+4,4,2,1);}return cv;}
+
+class Scene extends Phaser.Scene{
+ constructor(){super();}
+ preload(){
+   for(const k in SP) this.textures.addCanvas(k, bake2(SZ[k][0],SZ[k][1],SP[k]));
+   this.textures.addCanvas('aqu', bakeAqu());
+   this.textures.addCanvas('tree', bakeTree());
+   this.textures.addCanvas('ground', bakeGround());
+   this.textures.addCanvas('glow', bakeGlow('rgba(255,200,90,.9)'));
+   this.textures.addCanvas('glowP', bakeGlow('rgba(213,155,255,.9)'));
+   this.textures.addCanvas('glowG', bakeGlow('rgba(255,235,120,.9)'));
+   this.textures.addCanvas('water', bakeWater());
+   this.textures.addCanvas('plat', bake2(30,5,[[0,0,30,2,C.grass],[0,2,30,3,C.stone]]));
+   const sk=document.createElement('canvas');sk.width=VW;sk.height=VH;const sx=sk.getContext('2d');
+   const g=sx.createLinearGradient(0,0,0,150);g.addColorStop(0,'#f6d27a');g.addColorStop(.5,'#bfe0f2');g.addColorStop(1,'#a9d8f0');
+   sx.fillStyle=g;sx.fillRect(0,0,VW,VH);sx.fillStyle='#fff4c2';sx.beginPath();sx.arc(70,30,9,0,7);sx.fill();
+   sx.fillStyle='rgba(255,244,180,.4)';sx.beginPath();sx.arc(70,30,15,0,7);sx.fill();
+   this.textures.addCanvas('sky',sk);
+   /* === HUECO PARA PNGs REALES (descomenta y pon tus URLs/Assets de CodePen) ===
+   this.load.image('heroR','hero.png'); this.load.image('friendR','friend.png');
+   this.load.image('aquR','acueducto.png'); ... y luego usa 'heroR' en vez de 'hero'. */
+ }
+ create(){
+   this.physics.world.setBounds(0,0,WORLD,VH);
+   this.add.image(0,0,'sky').setOrigin(0,0).setScrollFactor(0);
+   this.add.image(0,62,'aqu').setOrigin(0,0).setScrollFactor(0.5);
+   this.waterTop=this.add.tileSprite(0,85,WORLD,6,'water').setOrigin(0,0).setScrollFactor(0.5);
+   [150,372,560].forEach(tx=>this.add.image(tx,GY-40,'tree').setOrigin(0,0).setScrollFactor(1));
+
+   // SUELO FISICO (staticImage => tiene cuerpo => el prota NO cae)
+   this.floor=this.physics.add.staticImage(0,GY,'ground').setOrigin(0,0).setScrollFactor(1).refreshBody();
+   // PLATAFORMAS FISICAS
+   const pY=[70,96,102],pX=[92,210,300];
+   this.plats=pX.map((px,i)=>this.physics.add.staticImage(px,pY[i],'plat').setOrigin(0,0).setScrollFactor(1).refreshBody());
+   // corazones colgando de la primera plataforma
+   for(let i=0;i<3;i++)this.add.image(pX[0]+6+i*8,pY[0]+12,'glowP').setOrigin(.5,0).setScale(.5).setTint(0xe23b3b).setScrollFactor(1);
+
+   // NPC anclados al suelo (origin centro; pies = GY)
+   this.add.image(72, GY-20, 'friend').setScrollFactor(1);          // 40px alto -> pies en 178
+   this.add.image(pX[0]+30, pY[0]-18, 'guard').setScrollFactor(1);  // sobre la plataforma
+   this.add.image(430, GY-18, 'boss').setScrollFactor(1);           // el romano de la 17
+
+   // coleccionables (static group con cuerpo)
+   this.reliqs=this.physics.add.staticGroup();
+   this.loots =this.physics.add.staticGroup();
+   [[150,'relic'],[214,'loot'],[360,'relic'],[470,'loot'],[600,'relic']].forEach(p=>
+     (p[1]==='relic'?this.reliqs:this.loots).create(p[0],GY-7,p[1]).refreshBody());
+
+   // glows aditivos
+   this.gFire=this.add.image(47,124,'glow').setBlendMode(Phaser.BlendModes.ADD).setScrollFactor(1).setScale(1.3);
+   this.gP=[];this.gG=[];
+   this.reliqs.getChildren().forEach(s=>this.gP.push(this.add.image(s.x,s.y,'glowP').setBlendMode(Phaser.BlendModes.ADD).setScale(1.4)));
+   this.loots.getChildren().forEach(s=>this.gG.push(this.add.image(s.x,s.y,'glowG').setBlendMode(Phaser.BlendModes.ADD).setScale(1.4)));
+
+   // animacion caminar del prota
+   this.anims.create({key:'walk',frames:[{key:'hero'},{key:'hero2'}],frameRate:6,repeat:-1});
+   // JUGADOR (physics sprite, origin centro)
+   this.player=this.physics.add.sprite(120,GY-14,'hero').setOrigin(.5,.5).setCollideWorldBounds(true);
+   this.player.body.setSize(16,26);
+
+   // COLISIONES (esto es lo que faltaba => ya no se cae)
+   this.physics.add.collider(this.player, this.floor);
+   this.physics.add.collider(this.player, this.plats);
+
+   this.cursors=this.input.keyboard.createCursorKeys();
+   this.keys=this.input.keyboard.addKeys('W,A,D,SPACE');
+   this.cameras.main.setBounds(0,0,WORLD,VH);
+   this.cameras.main.startFollow(this.player,true,0.12,0.12);
+
+   this.rN=0;this.bN=5;
+   this.physics.add.overlap(this.player,this.reliqs,(p,s)=>{const i=this.reliqs.getChildren().indexOf(s);s.destroy();if(this.gP[i])this.gP[i].destroy();this.rN++;document.getElementById('rN').textContent=this.rN;});
+   this.physics.add.overlap(this.player,this.loots,(p,s)=>{const i=this.loots.getChildren().indexOf(s);s.destroy();if(this.gG[i])this.gG[i].destroy();this.bN++;document.getElementById('bN').textContent=this.bN;});
+
+   this.petals=[];for(let i=0;i<14;i++){const s=this.add.image(Math.random()*WORLD,Math.random()*VH,'glowP').setScale(.22).setScrollFactor(.8).setTint(0xf7b9d2);
+     this.petals.push({s,vy:.3+Math.random()*.3,vx:.1+Math.random()*.2});}
+ }
+ update(t){
+   const p=this.player;
+   const left=this.cursors.left.isDown||this.keys.A.isDown;
+   const right=this.cursors.right.isDown||this.keys.D.isDown;
+   p.setVelocityX((right?100:0)-(left?100:0));
+   if(left&&!right)p.setFlipX(true); else if(right&&!left)p.setFlipX(false);
+   const onG=p.body.touching.down;
+   if((this.cursors.space.isDown||this.cursors.up.isDown||this.keys.W.isDown||this.keys.SPACE.isDown)&&onG)p.setVelocityY(-300);
+   if(p.body.velocity.x!==0&&onG)p.play('walk',true); else {p.stop();p.setTexture('hero');}
+   this.waterTop.tilePositionX+=0.6;
+   const g=.6+.4*Math.sin(t/90);this.gFire.setScale(1.1+g*.5).setAlpha(.5+g*.5);
+   this.gP.forEach(s=>s&&s.setAlpha(.4+.4*(.5+.5*Math.sin(t/300))));
+   this.gG.forEach(s=>s&&s.setAlpha(.4+.4*(.5+.5*Math.sin(t/300+1.5))));
+   for(const o of this.petals){o.s.y+=o.vy;o.s.x+=o.vx;if(o.s.y>VH){o.s.y=-4;o.s.x=this.cameras.main.scrollX+Math.random()*VW;}}
+ }
+}
+try{ new Phaser.Game({type:Phaser.AUTO,width:VW,height:VH,parent:'wrap',pixelArt:true,
+   physics:{default:'arcade',arcade:{gravity:{y:900},debug:false}},scene:Scene});
+   console.log('EMERITA Phaser v2 arranca OK');
+ }catch(e){console.error(e);const d=document.createElement('pre');
+   d.style.cssText='position:absolute;inset:0;color:#f55;background:rgba(0,0,0,.85);padding:10px;font:12px monospace;white-space:pre-wrap;z-index:99';
+   d.textContent='ERROR:\n'+(e.stack||e);document.getElementById('wrap').appendChild(d);}
+</script>

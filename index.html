@@ -3,34 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <title>Emerita Hub</title>
-<!-- LIBRERÍA P5.JS CORRECTA -->
+<!-- CARGA DE LIBRERÍA P5.JS VALIDADAS -->
 <script src="https://cloudflare.com"></script>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #050508; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: monospace; }
-  #wrap { position: relative; width: min(100vw, 177.78vh, 1024px); height: min(56.25vw, 100vh, 576px); box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e; background: #000; }
-  canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #050508;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-family: monospace;
+  }
+  #wrap {
+    position: relative;
+    width: min(100vw, 177.78vh, 1024px);
+    height: min(56.25vw, 100vh, 576px);
+    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e;
+    background: #000;
+  }
+  canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
 </style>
 </head>
 <body>
-<div id="wrap"></div>
-<script>
-const W = 384, H = 216, GROUND_Y = 180;
-let gameStarted = false;
-let player = { x: 40, y: GROUND_Y - 18 };
 
-function setup() { let c = createCanvas(W, H); c.parent('wrap'); noSmooth(); }
+<div id="wrap"></div>
+
+<script>
+// CONFIGURACIÓN DE TU REPOSITORIO
+const GITHUB_USER = "coquetornado"; 
+const REPO_NAME = "retroJuego";
+
+let gameStarted = false;
+let availableLevels = [];
+
+const W = 384, H = 216, GROUND_Y = 180;
+
+function setup() {
+  let c = createCanvas(W, H);
+  c.parent('wrap');
+  noSmooth();
+}
+
 function draw() {
-  background(10, 10, 20);
+  background(15, 15, 25);
+  
   if (!gameStarted) {
-    fill(255, 204, 0); textAlign(CENTER); textSize(16); text("EMERITA HUB", W/2, H/2);
-    textSize(8); text("Pulsa [ ESPACIO ] para iniciar", W/2, H/2 + 20);
+    // Texto del menú principal
+    fill(255, 180, 0);
+    textAlign(CENTER, CENTER);
+    textSize(16);
+    text("EMERITA HUB", W / 2, H / 2 - 10);
+    
+    fill(255);
+    textSize(8);
+    text("PULSA [ ESPACIO ] PARA INICIAR EL TEST", W / 2, H / 2 + 15);
   } else {
-    background(100, 200, 255);
-    fill(0, 170, 0); rect(0, GROUND_Y, W, H - GROUND_Y);
-    fill(0, 255, 0); rect(player.x, player.y, 12, 18);
+    // Dibujo del escenario básico de prueba
+    background(100, 180, 240);
+    
+    // Suelo
+    fill(50, 150, 50);
+    noStroke();
+    rect(0, GROUND_Y, W, H - GROUND_Y);
+    
+    // Jugador (Cubo verde)
+    fill(0, 255, 50);
+    rect(60, GROUND_Y - 18, 12, 18);
   }
 }
-function keyPressed() { if (key === ' ') gameStarted = true; }
+
+function keyPressed() {
+  if (key === ' ') {
+    gameStarted = true;
+  }
+}
 </script>
 </body>
 </html>

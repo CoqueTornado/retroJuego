@@ -2,35 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Emerita Hub</title>
-<!-- CARGA DE LIBRERÍA P5.JS VALIDADAS -->
+<title>Emerita Hub - Selector de Fases</title>
+<!-- Única librería necesaria para dibujar el juego -->
 <script src="https://cloudflare.com"></script>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    background: #050508;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    font-family: monospace;
-  }
-  #wrap {
-    position: relative;
-    width: min(100vw, 177.78vh, 1024px);
-    height: min(56.25vw, 100vh, 576px);
-    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e;
-    background: #000;
-  }
-  canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-  }
+  html, body { margin: 0; padding: 0; height: 100%; background: #050508; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: monospace; }
+  #wrap { position: relative; width: min(100vw, 177.78vh, 1024px); height: min(56.25vw, 100vh, 576px); box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e; background: #000; }
+  canvas { display: block; width: 100% !important; height: 100% !important; image-rendering: pixelated; }
 </style>
 </head>
 <body>
@@ -38,14 +16,18 @@
 <div id="wrap"></div>
 
 <script>
-// CONFIGURACIÓN DE TU REPOSITORIO
-const GITHUB_USER = "coquetornado"; 
+// CONFIGURACIÓN DE TU USUARIO
+const GITHUB_USER = "coquetornado";
 const REPO_NAME = "retroJuego";
 
-let gameStarted = false;
-let availableLevels = [];
+// LISTA DE TUS FICHEROS HTML (Añade aquí los nombres exactos cuando subas más)
+const listaFicheros = [
+  "fase1.html",
+  "fase2.html",
+  "pruebas.html"
+];
 
-const W = 384, H = 216, GROUND_Y = 180;
+const W = 384, H = 216;
 
 function setup() {
   let c = createCanvas(W, H);
@@ -56,34 +38,40 @@ function setup() {
 function draw() {
   background(15, 15, 25);
   
-  if (!gameStarted) {
-    // Texto del menú principal
-    fill(255, 180, 0);
-    textAlign(CENTER, CENTER);
-    textSize(16);
-    text("EMERITA HUB", W / 2, H / 2 - 10);
+  // Título del menú
+  fill(255, 180, 0);
+  textAlign(CENTER, TOP);
+  textSize(16);
+  text("EMERITA - SELECTOR DE FASES", W / 2, 20);
+  
+  // Instrucciones
+  fill(200);
+  textSize(8);
+  text("Pulsa el número en tu teclado para iniciar la fase:", W / 2, 50);
+  
+  // Renderizar la lista de ficheros disponibles en pantalla
+  for (let i = 0; i < listaFicheros.length; i++) {
+    // Ponemos el primer elemento resaltado en azul cian como guía estática
+    if (i === 0) fill('#99ffff');
+    else fill(150);
     
-    fill(255);
-    textSize(8);
-    text("PULSA [ ESPACIO ] PARA INICIAR EL TEST", W / 2, H / 2 + 15);
-  } else {
-    // Dibujo del escenario básico de prueba
-    background(100, 180, 240);
-    
-    // Suelo
-    fill(50, 150, 50);
-    noStroke();
-    rect(0, GROUND_Y, W, H - GROUND_Y);
-    
-    // Jugador (Cubo verde)
-    fill(0, 255, 50);
-    rect(60, GROUND_Y - 18, 12, 18);
+    textAlign(CENTER, TOP);
+    text(`[${i + 1}] - ${listaFicheros[i]}`, W / 2, 80 + (i * 16));
   }
+  
+  // Pie de página instructivo
+  fill(100);
+  text("Asegúrate de que los nombres coincidan exactamente en GitHub", W / 2, H - 30);
 }
 
 function keyPressed() {
-  if (key === ' ') {
-    gameStarted = true;
+  // Convertir la tecla pulsada a un índice del array (Teclas '1', '2', '3'...)
+  let index = parseInt(key) - 1;
+  
+  // Si el índice existe en nuestra lista, redirigimos la pestaña del navegador
+  if (index >= 0 && index < listaFicheros.length) {
+    let destinoUrl = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${listaFicheros[index]}`;
+    window.location.href = destinoUrl;
   }
 }
 </script>

@@ -1,0 +1,656 @@
+<!-- Librería p5.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #05030a;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; font-family: 'Courier New', monospace;
+    user-select: none;
+  }
+  #wrap {
+    position: relative;
+    width: min(100vw, 177.78vh, 1024px);
+    height: min(56.25vw, 100vh, 576px);
+    box-shadow: 0 0 35px rgba(255, 100, 0, 0.35), 0 0 0 4px #1c1028;
+    background: #000;
+  }
+  canvas {
+    display: block; width: 100% !important; height: 100% !important;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+</style>
+
+<div id="wrap"></div>
+
+<script>
+// ==========================================
+// 1. SINTETIZADOR DE AUDIO Y MÚSICA CHIPTUNE
+// ==========================================
+let actx = null, musicInterval = null;
+let musicStep = 0;
+
+function initAudio() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    startBgMusic();
+  }
+  if (actx.state === 'suspended') actx.resume();
+}
+
+function sfx(type) {
+  if (!actx) return;
+  try {
+    let now = actx.currentTime;
+    let osc = actx.createOscillator();
+    let gain = actx.createGain();
+    osc.connect(gain); gain.connect(actx.destination);
+
+    if (type === 'jump') {
+      osc.type = 'square'; osc.frequency.setValueAtTime(150, now);
+      osc.frequency.exponentialRampToValueAtTime(500, now + 0.1);
+      gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'slash') {
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400, now);
+      osc.frequency.linearRampToValueAtTime(80, now + 0.08);
+      gain.gain.setValueAtTime(0.12, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+      osc.start(now); osc.stop(now + 0.08);
+    } else if (type === 'spear') {
+      osc.type = 'triangle'; osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+      gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+    } else if (type === 'coin') {
+      osc.type = 'sine'; osc.frequency.setValueAtTime(987, now);
+      osc.frequency.setValueAtTime(1318, now + 0.06);
+      gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+      osc.start(now); osc.stop(now + 0.18);
+    } else if (type === 'hit') {
+      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+      gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+    } else if (type === 'dash') {
+      osc.type = 'sine'; osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.1);
+      gain.gain.setValueAtTime(0.12, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'block') {
+      osc.type = 'square'; osc.frequency.setValueAtTime(300, now);
+      osc.frequency.setValueAtTime(150, now + 0.05);
+      gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now); osc.stop(now + 0.1);
+    }
+  } catch(e){}
+}
+
+function startBgMusic() {
+  const bassNotes = [110, 110, 130, 110, 98, 98, 130, 146];
+  const leadNotes = [220, 0, 261, 293, 329, 293, 261, 220, 196, 220, 261, 220, 196, 174, 196, 220];
+  
+  musicInterval = setInterval(() => {
+    if (!actx || gameState !== 'PLAY') return;
+    try {
+      let now = actx.currentTime;
+      // Bajo
+      let bFreq = bassNotes[musicStep % bassNotes.length];
+      if (bFreq > 0) {
+        let osc = actx.createOscillator(); let g = actx.createGain();
+        osc.type = 'triangle'; osc.frequency.value = bFreq;
+        osc.connect(g); g.connect(actx.destination);
+        g.gain.setValueAtTime(0.04, now); g.gain.linearRampToValueAtTime(0.001, now + 0.18);
+        osc.start(now); osc.stop(now + 0.18);
+      }
+      // Melodía
+      let lFreq = leadNotes[musicStep % leadNotes.length];
+      if (lFreq > 0) {
+        let osc = actx.createOscillator(); let g = actx.createGain();
+        osc.type = 'square'; osc.frequency.value = lFreq;
+        osc.connect(g); g.connect(actx.destination);
+        g.gain.setValueAtTime(0.02, now); g.gain.linearRampToValueAtTime(0.001, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12);
+      }
+      musicStep++;
+    } catch(e){}
+  }, 160);
+}
+
+// ==========================================
+// 2. CONSTANTES Y PALETA
+// ==========================================
+const W = 480, H = 270;
+const WORLD_W = 1500;
+const GROUND_Y = 225;
+
+const PAL = {
+  skyTop: '#0d071a', skyMid: '#2d1233', skyBot: '#5e2343', skySun: '#ff8243',
+  stone: '#cbb3a0', stoneD: '#796658', brick: '#963f25',
+  grass: '#1b7a43', grassD: '#0d4726', clay: '#5e2b0e',
+  heroT: '#c41d30', heroL: '#6b0d17', cape: '#eb3449',
+  guardT: '#1b5291', helm: '#b2bcc4', gold: '#ffbb00', stamina: '#2da8d8',
+  white: '#ffffff', black: '#08060d'
+};
+
+let p, camX = 0, screenShake = 0;
+let platforms = [], collectibles = [], enemies = [], projectiles = [], particles = [], floatTexts = [], torches = [];
+let checkpoint = { x: 650, y: GROUND_Y - 24, reached: false };
+let boss = null, bossActive = false;
+let gameState = 'PLAY';
+let lightBuffer;
+
+// ==========================================
+// 3. SETUP Y REINICIO
+// ==========================================
+function setup() {
+  let c = createCanvas(W, H);
+  c.parent('wrap');
+  noSmooth();
+  lightBuffer = createGraphics(W, H);
+  resetLevel();
+}
+
+function resetLevel() {
+  p = {
+    x: 40, y: GROUND_Y - 20, w: 12, h: 20,
+    vx: 0, vy: 0, dir: 1,
+    isGrounded: false, canDoubleJump: true, isWallSliding: false,
+    isAttacking: false, attackTimer: 0,
+    isDashing: false, dashTimer: 0, dashCooldown: 0, ghostTrails: [],
+    hp: 4, maxHp: 4, stamina: 100, maxStamina: 100, score: 0, relics: 0,
+    invinc: 0
+  };
+
+  platforms = [
+    { x: 130, y: 175, w: 55, h: 8 },
+    { x: 240, y: 145, w: 50, h: 8, moving: true, minX: 200, maxX: 290, vx: 0.8 },
+    { x: 370, y: 125, w: 45, h: 8 },
+    { x: 440, y: 80, w: 12, h: 90 }, // Muro para Wall-Jump
+    { x: 520, y: 160, w: 60, h: 8 },
+    { x: 720, y: 170, w: 55, h: 8 },
+    { x: 850, y: 135, w: 50, h: 8 },
+    { x: 980, y: 175, w: 75, h: 8 }
+  ];
+
+  collectibles = [
+    { x: 130, y: 155, type: 'coin' }, { x: 370, y: 100, type: 'relic' },
+    { x: 520, y: 135, type: 'heart' }, { x: 850, y: 110, type: 'relic' },
+    { x: 980, y: 150, type: 'coin' }
+  ];
+
+  enemies = [
+    { x: 270, y: GROUND_Y - 10, w: 12, h: 18, vx: 0.6, minX: 210, maxX: 330, type: 'guard', hp: 2, maxHp: 2 },
+    { x: 370, y: 105, w: 12, h: 18, vx: 0, minX: 370, maxX: 370, type: 'archer', hp: 2, maxHp: 2, shootCd: 0 },
+    { x: 540, y: 140, w: 14, h: 18, vx: 0.4, minX: 500, maxX: 570, type: 'shield', hp: 3, maxHp: 3 },
+    { x: 780, y: GROUND_Y - 10, w: 12, h: 18, vx: 0.7, minX: 730, maxX: 840, type: 'guard', hp: 2, maxHp: 2 }
+  ];
+
+  torches = [
+    { x: 80, y: GROUND_Y - 35 }, { x: 370, y: 90 }, { x: 650, y: GROUND_Y - 35 }, { x: 1100, y: GROUND_Y - 35 }, { x: 1400, y: GROUND_Y - 35 }
+  ];
+
+  boss = {
+    x: 1280, y: GROUND_Y - 18, w: 22, h: 34,
+    vx: 0, vy: 0, dir: -1, hp: 16, maxHp: 16,
+    state: 'idle', stateTimer: 0, isEnraged: false,
+    active: false
+  };
+
+  projectiles = []; particles = []; floatTexts = [];
+  bossActive = false; gameState = 'PLAY';
+}
+
+// ==========================================
+// 4. CONTROLES
+// ==========================================
+function keyPressed() {
+  initAudio();
+  if (gameState !== 'PLAY') {
+    if (key === 'r' || key === 'R' || keyCode === ENTER) resetLevel();
+    return;
+  }
+
+  // SALTO / WALL-JUMP / DOBLE SALTO
+  if (keyCode === 87 || keyCode === UP_ARROW || key === ' ') {
+    if (p.isGrounded) {
+      p.vy = -5.3; p.isGrounded = false; p.canDoubleJump = true;
+      sfx('jump'); addDust(p.x, p.y + p.h/2, 6);
+    } else if (p.isWallSliding) {
+      p.vy = -5.0; p.vx = -p.dir * 3.5; p.dir *= -1;
+      sfx('jump'); addDust(p.x, p.y, 8);
+    } else if (p.canDoubleJump) {
+      p.vy = -4.8; p.canDoubleJump = false;
+      sfx('jump'); addSparkles(p.x, p.y, PAL.gold, 8);
+    }
+  }
+
+  // ATAQUE CON ESPADA (J / Z)
+  if (keyCode === 74 || keyCode === 90) performSwordAttack();
+
+  // LANZAR PILUM / LANZA (L / X)
+  if ((keyCode === 76 || keyCode === 88) && p.stamina >= 30) {
+    p.stamina -= 30;
+    projectiles.push({ x: p.x + p.dir * 10, y: p.y - 2, vx: p.dir * 6, type: 'pilum', owner: 'player' });
+    sfx('spear');
+  }
+
+  // DASH (K / SHIFT)
+  if ((keyCode === 75 || keyCode === 16) && p.dashCooldown <= 0 && p.stamina >= 20) {
+    p.stamina -= 20; p.isDashing = true; p.dashTimer = 12; p.dashCooldown = 35; p.invinc = 15; p.vy = 0;
+    sfx('dash'); addDust(p.x, p.y, 8);
+  }
+}
+
+function mousePressed() {
+  initAudio();
+  if (gameState !== 'PLAY') { resetLevel(); return; }
+  if (mouseButton === LEFT) performSwordAttack();
+  else if (mouseButton === RIGHT && p.stamina >= 30) {
+    p.stamina -= 30;
+    projectiles.push({ x: p.x + p.dir * 10, y: p.y - 2, vx: p.dir * 6, type: 'pilum', owner: 'player' });
+    sfx('spear');
+  }
+}
+
+function performSwordAttack() {
+  if (!p.isAttacking) { p.isAttacking = true; p.attackTimer = 10; sfx('slash'); }
+}
+
+// Disable context menu on right click
+document.addEventListener('contextmenu', event => event.preventDefault());
+
+// ==========================================
+// 5. LÓGICA DE JUEGO (UPDATE)
+// ==========================================
+function updateGame() {
+  if (gameState !== 'PLAY') return;
+
+  // Recargar Estamina
+  if (p.stamina < p.maxStamina) p.stamina = min(p.maxStamina, p.stamina + 0.4);
+  if (p.dashCooldown > 0) p.dashCooldown--;
+  if (p.invinc > 0) p.invinc--;
+
+  // --- Movimiento ---
+  if (p.isDashing) {
+    p.vx = p.dir * 6.5; p.dashTimer--;
+    if (frameCount % 2 === 0) p.ghostTrails.push({ x: p.x, y: p.y, dir: p.dir, alpha: 180 });
+    if (p.dashTimer <= 0) p.isDashing = false;
+  } else {
+    if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) { p.vx = -2.2; p.dir = -1; }
+    else if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) { p.vx = 2.2; p.dir = 1; }
+    else { p.vx *= 0.7; }
+
+    p.vy += 0.38; if (p.vy > 7) p.vy = 7;
+  }
+
+  p.x += p.vx; p.x = constrain(p.x, 8, WORLD_W - 8);
+  p.y += p.vy; p.isGrounded = false; p.isWallSliding = false;
+
+  // Colisión Suelo
+  if (p.y + p.h/2 >= GROUND_Y) { p.y = GROUND_Y - p.h/2; p.vy = 0; p.isGrounded = true; }
+
+  // Colisión Plataformas y Muros
+  for (let plat of platforms) {
+    if (plat.moving) {
+      plat.x += plat.vx;
+      if (plat.x >= plat.maxX || plat.x <= plat.minX) plat.vx *= -1;
+    }
+    // Plataforma horizontal
+    if (plat.w > plat.h) {
+      let pTop = plat.y - plat.h/2;
+      if (p.vy >= 0 && p.x + p.w/3 > plat.x - plat.w/2 && p.x - p.w/3 < plat.x + plat.w/2 &&
+          p.y + p.h/2 >= pTop && p.y + p.h/2 - p.vy <= pTop + 6) {
+        p.y = pTop - p.h/2; p.vy = 0; p.isGrounded = true;
+        if (plat.moving) p.x += plat.vx;
+      }
+    } else { // Muro vertical (Wall Slide)
+      if (abs(p.y - plat.y) < plat.h/2 && abs(p.x - plat.x) < plat.w/2 + 6 && !p.isGrounded) {
+        p.isWallSliding = true; p.vy = min(p.vy, 1.2);
+      }
+    }
+  }
+
+  // --- Espada Hitbox ---
+  if (p.isAttacking) {
+    p.attackTimer--;
+    let atkBox = { x: p.x + p.dir * 14, y: p.y, w: 22, h: 22 };
+
+    for (let e of enemies) {
+      if (e.hp > 0 && checkOverlap(atkBox, e)) {
+        if (e.type === 'shield' && (p.dir === -e.vx/abs(e.vx || 1))) {
+          sfx('block'); addSparkles(e.x, e.y, PAL.white, 5); addFloatText(e.x, e.y - 10, "BLOQUEADO", PAL.white);
+        } else {
+          e.hp--; e.vx = p.dir * 2; sfx('hit'); addSparkles(e.x, e.y, '#ff3838', 8);
+          if (e.hp <= 0) { p.score += 60; addDust(e.x, e.y, 10); }
+        }
+      }
+    }
+
+    if (bossActive && boss.hp > 0 && checkOverlap(atkBox, boss)) {
+      boss.hp--; sfx('hit'); screenShake = 5; addSparkles(boss.x, boss.y, PAL.gold, 10);
+      if (boss.hp <= 0) { sfx('hit'); p.score += 500; screenShake = 15; addDust(boss.x, boss.y, 25); }
+    }
+    if (p.attackTimer <= 0) p.isAttacking = false;
+  }
+
+  // Checkpoint & Coleccionables
+  if (!checkpoint.reached && abs(p.x - checkpoint.x) < 20) {
+    checkpoint.reached = true; sfx('coin'); addFloatText(checkpoint.x, checkpoint.y - 15, "CHECKPOINT!", PAL.gold);
+  }
+
+  for (let i = collectibles.length - 1; i >= 0; i--) {
+    let c = collectibles[i];
+    if (abs(p.x - c.x) < 12 && abs(p.y - c.y) < 14) {
+      if (c.type === 'coin') { p.score += 10; sfx('coin'); }
+      else if (c.type === 'relic') { p.relics++; p.score += 100; sfx('coin'); }
+      else if (c.type === 'heart' && p.hp < p.maxHp) { p.hp++; sfx('coin'); }
+      collectibles.splice(i, 1);
+    }
+  }
+
+  // --- ENEMIGOS ---
+  for (let e of enemies) {
+    if (e.hp <= 0) continue;
+    if (e.type === 'archer') {
+      e.shootCd = (e.shootCd || 0) + 1;
+      if (e.shootCd > 120 && abs(p.x - e.x) < 180) {
+        e.shootCd = 0;
+        let arrowDir = p.x < e.x ? -1 : 1;
+        projectiles.push({ x: e.x, y: e.y - 2, vx: arrowDir * 3.5, type: 'arrow', owner: 'enemy' });
+      }
+    } else {
+      e.x += e.vx; if (e.x >= e.maxX || e.x <= e.minX) e.vx *= -1;
+    }
+
+    if (p.invinc <= 0 && checkOverlap(p, e)) takeDamage(1);
+  }
+
+  // --- BOSS CENTURIÓN ---
+  if (p.x > 1050 && !bossActive && boss.hp > 0) {
+    bossActive = true; addFloatText(boss.x, boss.y - 30, "GOLIAT CENTURION", '#ff3838');
+  }
+
+  if (bossActive && boss.hp > 0) {
+    boss.stateTimer++; boss.dir = p.x < boss.x ? -1 : 1;
+    if (boss.hp <= boss.maxHp / 2) boss.isEnraged = true;
+
+    let speedMult = boss.isEnraged ? 1.5 : 1.0;
+
+    if (boss.state === 'idle') {
+      boss.vx = 0;
+      if (boss.stateTimer > (boss.isEnraged ? 25 : 45)) {
+        boss.state = random(['charge', 'jumpSlam']); boss.stateTimer = 0;
+      }
+    } else if (boss.state === 'charge') {
+      boss.vx = boss.dir * 2.8 * speedMult;
+      if (boss.stateTimer > 50) { boss.state = 'idle'; boss.stateTimer = 0; }
+    } else if (boss.state === 'jumpSlam') {
+      if (boss.stateTimer === 1) { boss.vy = -6; boss.vx = boss.dir * 2; }
+      boss.vy += 0.4; boss.y += boss.vy;
+      if (boss.y + boss.h/2 >= GROUND_Y) {
+        boss.y = GROUND_Y - boss.h/2; boss.state = 'idle'; boss.stateTimer = 0;
+        screenShake = 10; sfx('hit');
+        projectiles.push({ x: boss.x - 10, y: GROUND_Y - 6, vx: -3 * speedMult, type: 'shock', owner: 'enemy' });
+        projectiles.push({ x: boss.x + 10, y: GROUND_Y - 6, vx: 3 * speedMult, type: 'shock', owner: 'enemy' });
+      }
+    }
+
+    if (boss.state !== 'jumpSlam') boss.x += boss.vx;
+    if (p.invinc <= 0 && checkOverlap(p, boss)) takeDamage(1);
+  }
+
+  // --- PROYECTILES ---
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    let pr = projectiles[i]; pr.x += pr.vx;
+
+    // Impacto con Jugador
+    if (pr.owner === 'enemy' && p.invinc <= 0 && abs(p.x - pr.x) < 10 && abs(p.y - pr.y) < 12) {
+      takeDamage(1); projectiles.splice(i, 1); continue;
+    }
+    // Impacto de Pilum con Enemigos
+    if (pr.owner === 'player') {
+      for (let e of enemies) {
+        if (e.hp > 0 && abs(e.x - pr.x) < 12 && abs(e.y - pr.y) < 14) {
+          e.hp -= 2; sfx('hit'); addSparkles(e.x, e.y, PAL.gold, 8);
+          projectiles.splice(i, 1); break;
+        }
+      }
+      if (bossActive && boss.hp > 0 && abs(boss.x - pr.x) < 14 && abs(boss.y - pr.y) < 16) {
+        boss.hp -= 2; sfx('hit'); screenShake = 4; addSparkles(boss.x, boss.y, PAL.gold, 8);
+        projectiles.splice(i, 1); continue;
+      }
+    }
+    if (pr.x < 0 || pr.x > WORLD_W) projectiles.splice(i, 1);
+  }
+
+  // Partículas y Textos
+  for (let i = p.ghostTrails.length - 1; i >= 0; i--) {
+    p.ghostTrails[i].alpha -= 15; if (p.ghostTrails[i].alpha <= 0) p.ghostTrails.splice(i, 1);
+  }
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].life--;
+    if (particles[i].life <= 0) particles.splice(i, 1);
+  }
+  for (let i = floatTexts.length - 1; i >= 0; i--) {
+    floatTexts[i].y -= 0.5; floatTexts[i].life--;
+    if (floatTexts[i].life <= 0) floatTexts.splice(i, 1);
+  }
+
+  camX = lerp(camX, constrain(p.x - W/2, 0, WORLD_W - W), 0.1);
+  if (screenShake > 0) screenShake *= 0.85;
+
+  if (p.x > 1420 && (!bossActive || boss.hp <= 0)) gameState = 'WIN';
+}
+
+function takeDamage(amount) {
+  p.hp -= amount; p.invinc = 40; p.vy = -2.5; p.vx = -p.dir * 3;
+  screenShake = 8; sfx('hit'); addDust(p.x, p.y, 10);
+  if (p.hp <= 0) { p.hp = 0; gameState = 'GAMEOVER'; }
+}
+
+function checkOverlap(a, b) {
+  return abs(a.x - b.x) < (a.w + b.w)/2 && abs(a.y - b.y) < (a.h + b.h)/2;
+}
+
+function addDust(x, y, count) {
+  for(let i=0; i<count; i++) particles.push({ x: x, y: y, vx: random(-1.5, 1.5), vy: random(-1, 0.5), life: random(10, 20), col: PAL.stoneD, sz: random(2, 4) });
+}
+
+function addSparkles(x, y, col, count) {
+  for(let i=0; i<count; i++) particles.push({ x: x, y: y, vx: random(-2, 2), vy: random(-2, 2), life: random(12, 24), col: col, sz: random(1.5, 3) });
+}
+
+function addFloatText(x, y, txt, col) {
+  floatTexts.push({ x: x, y: y, txt: txt, col: col, life: 30 });
+}
+
+// ==========================================
+// 6. RENDERIZADO (DRAW)
+// ==========================================
+function draw() {
+  updateGame();
+  let shakeX = random(-screenShake, screenShake), shakeY = random(-screenShake, screenShake);
+  background(0);
+
+  drawParallaxSky(camX);
+
+  push();
+  translate(-camX + shakeX, shakeY);
+  drawLevelDecor();
+  drawPlatforms();
+  drawCollectibles();
+  drawEnemies();
+  drawBoss();
+  drawPlayer();
+  drawProjectiles();
+  drawParticles();
+  pop();
+
+  drawLighting(camX);
+  drawHUD();
+
+  if (gameState === 'GAMEOVER') drawGameOverScreen();
+  else if (gameState === 'WIN') drawWinScreen();
+}
+
+function drawParallaxSky(camX) {
+  noStroke();
+  fill(PAL.skyTop); rect(0, 0, W, 60); fill(PAL.skyMid); rect(0, 60, W, 60);
+  fill(PAL.skyBot); rect(0, 120, W, 60); fill(PAL.skySun); rect(0, 180, W, 45);
+  fill('#ffe6a3'); rect(70 - camX * 0.05, 70, 36, 36);
+
+  fill(255, 180);
+  let cs = [[30, 40, 40], [200, 30, 50], [500, 35, 60]];
+  for (let c of cs) {
+    let x = (c[0] - camX * 0.1) % (W + 100); if (x < -60) x += W + 100;
+    rect(x, c[1], c[2], 8);
+  }
+}
+
+function drawLevelDecor() {
+  noStroke();
+  fill(PAL.grass); rect(0, GROUND_Y, WORLD_W, 6);
+  fill(PAL.grassD); rect(0, GROUND_Y + 6, WORLD_W, 4);
+  fill(PAL.clay); rect(0, GROUND_Y + 10, WORLD_W, 35);
+
+  fill(PAL.stoneD); rect(checkpoint.x, checkpoint.y, 3, 24);
+  fill(checkpoint.reached ? PAL.gold : PAL.heroT); rect(checkpoint.x + 3, checkpoint.y + 2, 14, 9);
+
+  fill(PAL.stone); rect(1400, GROUND_Y - 70, 70, 70);
+  fill(PAL.black); rect(1420, GROUND_Y - 45, 30, 45);
+}
+
+function drawPlatforms() {
+  for (let p of platforms) {
+    fill(PAL.grass); rect(p.x - p.w/2, p.y - p.h/2, p.w, 3);
+    fill(PAL.stone); rect(p.x - p.w/2, p.y - p.h/2 + 3, p.w, p.h - 3);
+  }
+}
+
+function drawCollectibles() {
+  for (let c of collectibles) {
+    let floatY = Math.sin((frameCount + c.x) * 0.1) * 2;
+    if (c.type === 'coin') { fill(PAL.gold); rect(c.x - 3, c.y - 3 + floatY, 6, 6); }
+    else if (c.type === 'relic') { fill('#e099ff'); rect(c.x - 4, c.y - 5 + floatY, 8, 10); }
+    else if (c.type === 'heart') { fill('#ff3838'); rect(c.x - 4, c.y - 4 + floatY, 8, 8); }
+  }
+}
+
+function drawEnemies() {
+  for (let e of enemies) {
+    if (e.hp <= 0) continue;
+    push(); translate(e.x, e.y);
+    fill(PAL.guardT); rect(-5, -4, 10, 10);
+    fill(PAL.helm); rect(-4, -9, 8, 5);
+    if (e.type === 'shield') { fill(PAL.gold); rect(-7, -6, 4, 14); } // Escudo
+    else if (e.type === 'archer') { fill(PAL.clay); rect(4, -8, 2, 12); } // Arco
+    fill(PAL.stoneD); rect(-4, 6, 3, 4); rect(1, 6, 3, 4);
+    pop();
+  }
+}
+
+function drawBoss() {
+  if (!bossActive || boss.hp <= 0) return;
+  push(); translate(boss.x, boss.y);
+  let dir = boss.dir;
+  fill(boss.isEnraged ? '#ff1100' : PAL.cape); rect(-10 * dir, -10, 8, 22);
+  fill(PAL.gold); rect(-8, -14, 16, 20);
+  fill(PAL.helm); rect(-6, -22, 12, 8);
+  fill(PAL.heroT); rect(-2, -26, 4, 4);
+  fill(PAL.black); rect(dir > 0 ? 1 : -4, -19, 3, 2);
+  pop();
+}
+
+function drawPlayer() {
+  for (let g of p.ghostTrails) { fill(255, 50, 80, g.alpha); rect(g.x - 6, g.y - 10, 12, 20); }
+  if (p.invinc > 0 && frameCount % 4 < 2) return;
+
+  push(); translate(p.x, p.y);
+  let dir = p.dir, bob = Math.abs(p.vx) > 0.1 ? Math.sin(frameCount * 0.4) * 1.5 : 0;
+  fill(PAL.cape); rect(-6 * dir, -8 + bob, 5, 12);
+  fill('#ffcc99'); rect(-3, -11 + bob, 6, 6);
+  fill('#522a00'); rect(-4, -12 + bob, 8, 3);
+  fill(PAL.heroT); rect(-4, -5 + bob, 8, 8);
+  fill(PAL.heroL); rect(-3, 3, 2, 7); rect(1, 3, 2, 7);
+
+  if (p.isAttacking) {
+    fill(PAL.white); rect(dir * 8, -10, 14, 18);
+  }
+  pop();
+}
+
+function drawProjectiles() {
+  for (let pr of projectiles) {
+    fill(pr.type === 'pilum' ? PAL.gold : '#ff3838');
+    rect(pr.x - 4, pr.y - 2, 8, 4);
+  }
+}
+
+function drawParticles() {
+  noStroke();
+  for (let pt of particles) { fill(pt.col); rect(pt.x, pt.y, pt.sz, pt.sz); }
+}
+
+function drawLighting(camX) {
+  lightBuffer.clear(); lightBuffer.background(10, 15, 30, 130);
+  lightBuffer.blendMode(REMOVE);
+  for (let t of torches) lightBuffer.circle(t.x - camX, t.y, 90);
+  lightBuffer.circle(p.x - camX, p.y, 70);
+  lightBuffer.blendMode(BLEND);
+  image(lightBuffer, 0, 0);
+
+  noStroke();
+  for (let t of torches) {
+    let screenX = t.x - camX;
+    if (screenX > -20 && screenX < W + 20) {
+      fill('#ff3838'); rect(screenX - 2, t.y - 4, 4, 6);
+      fill(PAL.gold); rect(screenX - 1, t.y - 6, 2, 4);
+    }
+  }
+}
+
+function drawHUD() {
+  fill(10, 10, 20, 220); rect(0, 0, W, 22);
+  stroke(255, 40); line(0, 22, W, 22); noStroke();
+
+  // Corazones
+  for (let i = 0; i < p.maxHp; i++) {
+    fill(i < p.hp ? '#ff3838' : '#442222'); rect(8 + i * 10, 6, 7, 7);
+  }
+
+  // Barra Estamina
+  fill(30); rect(55, 7, 30, 5);
+  fill(PAL.stamina); rect(55, 7, map(p.stamina, 0, p.maxStamina, 0, 30), 5);
+
+  fill(PAL.white); textSize(7); textAlign(LEFT, CENTER);
+  text("STAMINA", 55, 16);
+  text("SCORE: " + p.score, 100, 11);
+
+  textAlign(RIGHT, CENTER);
+  fill('#e099ff'); text("RELIQUIAS: " + p.relics + "/2", W - 10, 11);
+
+  if (bossActive && boss.hp > 0) {
+    fill(0, 200); rect(W/2 - 60, H - 18, 120, 12);
+    fill(boss.isEnraged ? '#ff1100' : '#ff3838'); rect(W/2 - 58, H - 16, map(boss.hp, 0, boss.maxHp, 0, 116), 8);
+    fill(PAL.white); textSize(7); textAlign(CENTER, CENTER);
+    text(boss.isEnraged ? "GOLIAT (BERSERKER)" : "CENTURION GOLIAT", W/2, H - 12);
+  }
+}
+
+function drawGameOverScreen() {
+  fill(0, 200); rect(0, 0, W, H);
+  fill('#ff3838'); textSize(14); textAlign(CENTER, CENTER);
+  text("HAS CAÍDO EN COMBATE", W/2, H/2 - 15);
+  fill(PAL.white); textSize(8); text("Presiona 'R' o Clic para Reintentar", W/2, H/2 + 15);
+}
+
+function drawWinScreen() {
+  fill(0, 220); rect(0, 0, W, H);
+  fill(PAL.gold); textSize(14); textAlign(CENTER, CENTER);
+  text("¡VICTORIA IMPERIAL!", W/2, H/2 - 25);
+  fill(PAL.white); textSize(8);
+  text("PUNTUACIÓN FINAL: " + p.score, W/2, H/2);
+  text("Presiona 'R' para Volver a Jugar", W/2, H/2 + 25);
+}
+</script>

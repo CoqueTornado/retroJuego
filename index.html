@@ -2,32 +2,30 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Selector de Fases</title>
-<!-- Evita el error 404 del favicon -->
+<title>Selector de Fases Automático</title>
+<!-- Favicon retro para evitar error 404 -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
 
-<!-- LIBRERÍA P5.JS CORRECTA -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<!-- Librería p5.js -->
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
 
 <style>
-  html, body { 
-    margin: 0; padding: 0; height: 100%; 
-    background: #050508; 
-    display: flex; align-items: center; justify-content: center; 
-    overflow: hidden; font-family: monospace; 
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #050508;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; font-family: monospace;
   }
-  #wrap { 
-    position: relative; 
-    width: min(100vw, 177.78vh, 1024px); 
-    height: min(56.25vw, 100vh, 576px); 
-    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e; 
-    background: #000; 
+  #wrap {
+    position: relative;
+    width: min(100vw, 177.78vh, 1024px);
+    height: min(56.25vw, 100vh, 576px);
+    box-shadow: 0 0 20px rgba(255, 150, 0, 0.2), 0 0 0 4px #1a1a2e;
+    background: #000;
   }
-  canvas { 
-    display: block; 
-    width: 100% !important; 
-    height: 100% !important; 
-    image-rendering: pixelated; 
+  canvas {
+    display: block; width: 100% !important; height: 100% !important;
+    image-rendering: pixelated;
   }
 </style>
 </head>
@@ -37,41 +35,125 @@
 const GITHUB_USER = "coquetornado";
 const REPO_NAME = "retroJuego";
 
-// Lista de fases disponibles
-const listaFicheros = [
-  "fase1.html",
-  "fase2.html"
-];
-
 const W = 384, H = 216;
+
+let listaFicheros = [];
+let estado = "CARGANDO"; // Estados: "CARGANDO", "LISTO", "ERROR", "VACIO"
+let selectedIndex = 0;
 
 function setup() {
   let c = createCanvas(W, H);
   c.parent('wrap');
   noSmooth();
+  
+  // Buscar archivos en el repositorio automáticamente
+  cargarFasesDesdeGitHub();
+}
+
+function cargarFasesDesdeGitHub() {
+  // URL de la API pública de GitHub para tu repositorio
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/`;
+  
+  fetch(url)
+    .then(response => {
+      if (!response.ok) throw new Error("No se pudo conectar con GitHub");
+      return response.json();
+    })
+    .then(data => {
+      // Filtrar solo archivos .html y descartar index.html
+      listaFicheros = data
+        .filter(item => 
+          item.type === "file" && 
+          item.name.toLowerCase().endsWith(".html") && 
+          item.name.toLowerCase() !== "index.html"
+        )
+        .map(item => item.name)
+        .sort(); // Ordenar alfabéticamente
+
+      if (listaFicheros.length > 0) {
+        estado = "LISTO";
+      } else {
+        estado = "VACIO";
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      estado = "ERROR";
+    });
 }
 
 function draw() {
   background(15, 15, 25);
   
+  // Título principal
   fill(255, 180, 0);
   textAlign(CENTER, TOP);
-  textSize(16);
-  text("SELECTOR DE FASES", W / 2, 20);
-  
-  fill(200);
-  textSize(8);
-  text("Pulsa el numero en tu teclado para iniciar:", W / 2, 50);
-  
-  for (let i = 0; i < listaFicheros.length; i++) {
-    if (i === 0) fill('#99ffff');
-    else fill(150);
-    text(`[${i + 1}] - ${listaFicheros[i]}`, W / 2, 80 + (i * 16));
+  textSize(14);
+  text("SELECTOR DE FASES", W / 2, 12);
+
+  if (estado === "CARGANDO") {
+    fill(200);
+    textSize(9);
+    text("Buscando fases en GitHub...", W / 2, H / 2 - 5);
+    let dots = ".".repeat((floor(frameCount / 15) % 4));
+    text(dots, W / 2, H / 2 + 10);
+  } 
+  else if (estado === "ERROR") {
+    fill(255, 80, 80);
+    textSize(9);
+    text("Error al conectar con la API de GitHub", W / 2, H / 2);
+  } 
+  else if (estado === "VACIO") {
+    fill(255, 200, 80);
+    textSize(9);
+    text("No se encontraron otros archivos .html", W / 2, H / 2);
+  } 
+  else if (estado === "LISTO") {
+    fill(180);
+    textSize(7);
+    text("Flechas [▲/▼] + ENTER  o pulsa el [Número]:", W / 2, 32);
+
+    let startY = 52;
+    for (let i = 0; i < listaFicheros.length; i++) {
+      let y = startY + (i * 15);
+      
+      if (y > H - 20) break; // Evita pintar fuera de la pantalla
+
+      if (i === selectedIndex) {
+        fill('#00ffff');
+        text(`> [${i + 1}] ${listaFicheros[i]} <`, W / 2, y);
+      } else {
+        fill(130);
+        text(`[${i + 1}] ${listaFicheros[i]}`, W / 2, y);
+      }
+    }
   }
 }
 
 function keyPressed() {
-  let index = parseInt(key) - 1;
+  if (estado !== "LISTO") return;
+
+  // Navegación con flechas
+  if (keyCode === UP_ARROW) {
+    selectedIndex = (selectedIndex - 1 + listaFicheros.length) % listaFicheros.length;
+  } 
+  else if (keyCode === DOWN_ARROW) {
+    selectedIndex = (selectedIndex + 1) % listaFicheros.length;
+  } 
+  // Iniciar fase con ENTER
+  else if (keyCode === ENTER) {
+    cargarFase(selectedIndex);
+  } 
+  // Directo pulsando el número (1, 2, 3...)
+  else {
+    let num = parseInt(key) - 1;
+    if (!isNaN(num) && num >= 0 && num < listaFicheros.length) {
+      cargarFase(num);
+    }
+  }
+}
+
+function cargarFase(index) {
   if (index >= 0 && index < listaFicheros.length) {
     window.location.href = `https://${GITHUB_USER}.github.io/${REPO_NAME}/${listaFicheros[index]}`;
   }

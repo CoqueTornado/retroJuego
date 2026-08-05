@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Sumar 10</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --board-bg: #bbada0;
+            --cell-empty: #cdc1b4;
+            --text-dark: #776e65;
+            --text-light: #f9f6f2;
+            --highlight: #ffeb3b;
+            --selected: #81c784;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            user-select: none;
+        }
+
+        h1 {
+            color: var(--text-dark);
+            margin-bottom: 10px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            width: 400px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .score-box {
+            background: var(--board-bg);
+            padding: 10px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .score-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: #eee4da;
+        }
+
+        .score-value {
+            font-size: 1.5rem;
+        }
+
+        button {
+            background-color: #8f7a66;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #7f6a56;
+        }
+
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            gap: 6px;
+            background-color: var(--board-bg);
+            padding: 6px;
+            border-radius: 6px;
+            width: 400px;
+            height: 400px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .cell {
+            background-color: var(--cell-empty);
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+            position: relative;
+        }
+
+        .cell:hover {
+            filter: brightness(0.95);
+        }
+
+        .cell.selected {
+            background-color: var(--selected);
+            color: white;
+            transform: scale(0.95);
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+        }
+
+        .cell.matched {
+            animation: popOut 0.3s ease-out forwards;
+        }
+
+        @keyframes popOut {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        /* Colores según el número */
+        .val-1 { background-color: #eee4da; }
+        .val-2 { background-color: #ede0c8; }
+        .val-3 { background-color: #f2b179; color: white; }
+        .val-4 { background-color: #f59563; color: white; }
+        .val-5 { background-color: #f67c5f; color: white; }
+        .val-6 { background-color: #f65e3b; color: white; }
+        .val-7 { background-color: #edcf72; color: white; }
+        .val-8 { background-color: #edcc61; color: white; }
+        .val-9 { background-color: #edc850; color: white; }
+
+        .rules {
+            margin-top: 20px;
+            max-width: 400px;
+            font-size: 0.9rem;
+            color: #555;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .rules ul {
+            padding-left: 20px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Suma 10</h1>
+
+    <div class="header">
+        <div class="score-box">
+            <div class="score-label">Puntuación</div>
+            <div class="score-value" id="score">0</div>
+        </div>
+        <button onclick="initGame()">Reiniciar</button>
+    </div>
+
+    <div id="game-board"></div>
+
+    <div class="rules">
+        <strong>Cómo jugar:</strong>
+        <ul>
+            <li>Haz clic en dos números <strong>adyacentes</strong> (arriba, abajo, izquierda, derecha).</li>
+            <li>Ganas puntos si suman <strong>10</strong> (ej: 4+6, 1+9) o si son <strong>iguales</strong> (ej: 5+5).</li>
+            <li>Los números caerán hacia abajo y se rellenarán nuevos arriba.</li>
+            <li>¡Intenta conseguir la máxima puntuación!</li>
+        </ul>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 8;
+        const boardElement = document.getElementById('game-board');
+        const scoreElement = document.getElementById('score');
+        
+        let board = [];
+        let selectedCell = null;
+        let score = 0;
+        let isProcessing = false;
+
+        // Inicializar juego
+        function initGame() {
+            board = [];
+            score = 0;
+            scoreElement.innerText = score;
+            selectedCell = null;
+            isProcessing = false;
+
+            // Llenar tablero con números aleatorios del 1 al 9
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                let row = [];
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    row.push(getRandomNumber());
+                }
+                board.push(row);
+            }
+            renderBoard();
+        }
+
+        function getRandomNumber() {
+            return Math.floor(Math.random() * 9) + 1;
+        }
+
+        // Renderizar el tablero en el DOM
+        function renderBoard() {
+            boardElement.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cellValue = board[r][c];
+                    const cellDiv = document.createElement('div');
+                    cellDiv.classList.add('cell');
+                    
+                    if (cellValue !== null) {
+                        cellDiv.classList.add(`val-${cellValue}`);
+                        cellDiv.innerText = cellValue;
+                        cellDiv.dataset.row = r;
+                        cellDiv.dataset.col = c;
+                        
+                        if (selectedCell && selectedCell.r === r && selectedCell.c === c) {
+                            cellDiv.classList.add('selected');
+                        }
+
+                        cellDiv.addEventListener('click', () => handleCellClick(r, c));
+                    }
+                    
+                    boardElement.appendChild(cellDiv);
+                }
+            }
+        }
+
+        function handleCellClick(r, c) {
+            if (isProcessing) return;
+
+            // Si ya hay una seleccionada
+            if (selectedCell) {
+                // Si clicamos la misma, deseleccionar
+                if (selectedCell.r === r && selectedCell.c === c) {
+                    selectedCell = null;
+                    renderBoard();
+                    return;
+                }
+
+                // Comprobar adyacencia (sin diagonales)
+                const dr = Math.abs(selectedCell.r - r);
+                const dc = Math.abs(selectedCell.c - c);
+                
+                if (dr + dc === 1) {
+                    // Son adyacentes, comprobar lógica
+                    checkMatch(selectedCell.r, selectedCell.c, r, c);
+                } else {
+                    // No son adyacentes, cambiar selección a la nueva
+                    selectedCell = { r, c };
+                    renderBoard();
+                }
+            } else {
+                // Seleccionar primera celda
+                selectedCell = { r, c };
+                renderBoard();
+            }
+        }
+
+        function checkMatch(r1, c1, r2, c2) {
+            const val1 = board[r1][c1];
+            const val2 = board[r2][c2];
+
+            let isMatch = false;
+
+            // Condición 1: Suma 10
+            if (val1 + val2 === 10) {
+                isMatch = true;
+            }
+            // Condición 2: Iguales
+            else if (val1 === val2) {
+                isMatch = true;
+            }
+
+            if (isMatch) {
+                isProcessing = true;
+                // Eliminar visualmente primero
+                const cells = document.querySelectorAll('.cell');
+                const index1 = r1 * BOARD_SIZE + c1;
+                const index2 = r2 * BOARD_SIZE + c2;
+                
+                cells[index1].classList.add('matched');
+                cells[index2].classList.add('matched');
+
+                // Actualizar puntuación
+                score += (val1 + val2);
+                scoreElement.innerText = score;
+
+                setTimeout(() => {
+                    // Lógica de eliminación y caída
+                    board[r1][c1] = null;
+                    board[r2][c2] = null;
+                    
+                    applyGravity();
+                    fillEmptySpaces();
+                    selectedCell = null;
+                    isProcessing = false;
+                    renderBoard();
+                }, 300);
+            } else {
+                // No es match, simplemente mover la selección a la nueva celda
+                selectedCell = { r: r2, c: c2 };
+                renderBoard();
+            }
+        }
+
+        function applyGravity() {
+            // Para cada columna, hacer caer los números
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                let writeRow = BOARD_SIZE - 1;
+                // Recorrer de abajo a arriba
+                for (let r = BOARD_SIZE - 1; r >= 0; r--) {
+                    if (board[r][c] !== null) {
+                        board[writeRow][c] = board[r][c];
+                        if (writeRow !== r) {
+                            board[r][c] = null;
+                        }
+                        writeRow--;
+                    }
+                }
+            }
+        }
+
+        function fillEmptySpaces() {
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] === null) {
+                        board[r][c] = getRandomNumber();
+                    }
+                }
+            }
+        }
+
+        // Arrancar el juego
+        initGame();
+
+    </script>
+</body>
+</html>
